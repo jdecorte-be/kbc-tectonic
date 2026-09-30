@@ -1,96 +1,101 @@
-# Full-Stack Docker Architecture (PostgreSQL + FastAPI + Nuxt 4 + Banking Client App)
+# KBC Tectonic
 
-A complete, production-ready containerized architecture featuring **PostgreSQL 16**, **FastAPI (Python 3.11)**, **Nuxt 4 / Vue 3 (pnpm)**, a **Fintech Banking Client App (React + Vite)**, an **Adminer Database Web Manager**, and a **Makefile** for seamless developer workflows.
+Hackathon project for KBC. It reads a client's bank transactions, works out their **habits**, and from those infers **life-stage profiles** (student, investor, going on holiday, new parent, …). Each profile has a confidence score, the reasons behind it, and a suggested next best offer.
 
----
+> All data is synthetic. Never commit real client data.
 
-## 🚀 Architecture Overview
+## What it does
+
+- **Habit engine** groups transactions by category (income, housing, mobility, investing, travel, …) and measures spending rhythm, recurring payments, savings rate and month-over-month drift.
+- **Profiling engine** turns habits into one or more profiles per client. It is rule-based and explainable: every profile lists the signals that triggered it.
+- **Jev AI (optional)** asks the TypeSafe System One API for a second, probabilistic profile per client.
+- **Advisor dashboard** (Nuxt) shows the client list, profile badges, segment distribution, habit trends, alerts, and a graph of related clients.
+- **Client app** (React) is a mock banking app showing the client's own view: balance, profile badges, transactions and spending analytics.
+
+### Profiles
+
+| Core | Extra |
+| :--- | :--- |
+| Student · Young investor · Investor · Holiday soon | New parent / family · Homebuyer / mover · Car owner / commuter · Freelancer · Saver · Financial stress · Retiree · Big event |
+
+The profile catalogue, with offers and "looks for" signals, is defined in `backend/app/profiles.py`.
+
+## Architecture
 
 ```
-                          ┌──────────────────────────┐      ┌──────────────────────────┐
-                          │   Banking Client App     │      │   Nuxt 4 Frontend App    │
-                          │   http://localhost:3001  │      │   http://localhost:3000  │
-                          └─────────────┬────────────┘      └─────────────┬────────────┘
-                                        │                                 │
-                                        └────────────────┬────────────────┘
-                                                         │ REST API
-                                                         ▼
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│ Docker Network: app-network                                                              │
-│                                                                                          │
-│  ┌─────────────────────────┐  ┌─────────────────────────┐  ┌─────────────────────────┐  │
-│  │  client_frontend        │  │  frontend               │  │  backend                │  │
-│  │  (Banking Client App)   │  │  (Nuxt 4 / Vue 3)       │  │  (FastAPI + Uvicorn)    │  │
-│  │  Port 3001              │  │  Port 3000              │  │  Port 8000              │  │
-│  └─────────────────────────┘  └─────────────────────────┘  └────────────┬────────────┘  │
-│                                                                         │                │
-│  ┌─────────────────────────┐                                            │ SQLAlchemy     │
-│  │  adminer (DB UI)        │                                            ▼                │
-│  │  http://localhost:8080  ├────────────────────────────────────────► ┌──────────────────┐  │
-│  │  (Inspect DB)           │                                          │  db (Postgres)   │  │
-│  └─────────────────────────┘                                          │  Port 5433 (Host)│  │
-│                                                                       └──────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────────────────┘
+ Advisor dashboard (Nuxt 4)   :3000 ─┐
+ Client app (React + Vite)    :3001 ─┼─ REST ──► Backend (FastAPI) :8000 ──► PostgreSQL 16 :5433
+                                     │                 │
+ Adminer (DB UI)              :8080 ─┘                 └──► Jev AI API (optional)
 ```
 
-### Services Summary
+| Path | Stack | Role |
+| :--- | :--- | :--- |
+| `backend/` | FastAPI, SQLAlchemy, Pydantic | API, seed data, habit and profiling engines, Jev client |
+| `frontend/` | Nuxt 4, Nuxt UI, shadcn-vue, Tailwind v4, Unovis | Advisor dashboard |
+| `client-app/` | React 18, Vite, TypeScript | Client-facing banking app |
 
-- **Banking Client App (`client_frontend`)**: Mobile/Web Fintech banking interface on [http://localhost:3001](http://localhost:3001) featuring account balances, lifestyle profile badges, interactive transaction search/filtering, and spending analytics.
-- **Frontend App (`frontend`)**: Nuxt 4 / Vue 3 / `@nuxt/ui` / Tailwind CSS application running on [http://localhost:3000](http://localhost:3000).
-- **Backend (`backend`)**: FastAPI application on [http://localhost:8000](http://localhost:8000) with interactive Swagger OpenAPI docs ([http://localhost:8000/api/docs](http://localhost:8000/api/docs)), health check (`/api/health`), and database seed script.
-- **Database Web Management (`adminer`)**: Adminer web GUI on [http://localhost:8080](http://localhost:8080) for inspecting PostgreSQL tables by hand.
-- **Database (`db`)**: PostgreSQL 16 Alpine container on host port `5433` / container port `5432` storing `users` and `transactions`.
-- **Makefile**: Unified command interface for setup, startup, database seeding, status inspection, logging, and shell access.
+## Quick start
 
----
+You need Docker (with Compose v2) and `make`.
 
-## 🛠️ Quick Start Guide
-
-### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/) & [Docker Compose v2+](https://docs.docker.com/compose/)
-- `make` (GNU Make)
-
-### 1. Start the Stack
 ```bash
-make up
+make up      # creates .env from .env.example if missing, then starts all services
+make seed    # (re)seeds ~105 synthetic Belgian clients with a year of transactions each
 ```
 
-### 2. Seed the Database
+| Service | URL |
+| :--- | :--- |
+| Advisor dashboard | http://localhost:3000 |
+| Client app | http://localhost:3001 |
+| API docs (Swagger) | http://localhost:8000/api/docs |
+| Adminer | http://localhost:8080 (server `db`, user/password `postgres`, database `tododb`) |
+
+To enable Jev AI profiling, set `JEV_API_KEY` in `.env` and run `make restart`. Without the key, the `/api/jev/*` endpoints return `503`. Everything else still works.
+
+## API
+
+The full reference is at `/api/docs` or in [`OPENAPI.md`](OPENAPI.md). Main endpoints:
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/dashboard` | KPIs, segment distribution, habit trends, weekday rhythm |
+| `GET` | `/api/clients`, `/api/clients/{id}` | Profiled clients with habits, profiles, reasons and offers |
+| `GET` | `/api/profiles` | Profile catalogue |
+| `GET` | `/api/relations` | Related clients (household links and similar profiles) |
+| `GET/POST` | `/api/users`, `/api/transactions` | Raw users and transactions |
+| `POST` | `/api/seed` | Seed the database |
+| `GET/POST` | `/api/jev/clients` | Read cached Jev results, or run Jev over all clients |
+| `GET` | `/api/health` | API and database health |
+
+Clients are profiled live from the `users` and `transactions` tables on every request. Nothing is precomputed.
+
+## Development
+
+**Frontend** (run in `frontend/`, use pnpm):
+
 ```bash
-make seed
+pnpm install
+pnpm dev
+pnpm lint && pnpm typecheck
+pnpm gen:api   # regenerate app/types/api.gen.ts from the running backend's OpenAPI spec
 ```
-*Seeds PostgreSQL with 5 sample Belgian users (rich demographic/financial profiles) and 500 lifestyle-matched transactions (100 per user).*
 
-### 3. Access Services
-- 🏦 **Banking Client App**: [http://localhost:3001](http://localhost:3001) *(Client Banking Dashboard)*
-- 🌐 **Nuxt 4 Frontend**: [http://localhost:3000](http://localhost:3000)
-- 🗄️ **Adminer DB Inspection UI**: [http://localhost:8080](http://localhost:8080)
-  - *Login*: Server: `db`, Username: `postgres`, Password: `postgres`, Database: `tododb`
-- ⚡ **FastAPI OpenAPI Docs**: [http://localhost:8000/api/docs](http://localhost:8000/api/docs)
-- 💚 **Backend Health Check**: [http://localhost:8000/api/health](http://localhost:8000/api/health)
+To get typed API data, add a Pydantic `response_model` in `backend/app/schemas.py`, run `pnpm gen:api`, and import the types from `@/types/api`.
 
----
+**Backend**: in Docker, the `backend/` folder is mounted into the container and Uvicorn hot-reloads on changes. Use `make shell-backend` to open a shell there.
 
-## 📋 Makefile Commands Reference
+## Make commands
 
-Run `make` or `make help` to view all available commands:
+Run `make help` to see all targets.
 
 | Command | Description |
 | :--- | :--- |
-| `make up` (or `make start`) | Start all services in background (with healthchecks) |
-| `make seed` | Populate database with 5 sample users & 500 lifestyle transactions |
-| `make build` | Rebuild Docker container images |
-| `make down` (or `make stop`) | Stop running services |
-| `make restart` | Restart all containers |
-| `make status` (or `make ps`) | View health and status of containers |
-| `make logs` | Tail logs for all services |
-| `make logs-client` | Tail logs for Banking Client App (port 3001) |
-| `make logs-backend` | Tail logs for FastAPI backend (port 8000) |
-| `make logs-frontend` | Tail logs for Nuxt 4 frontend (port 3000) |
-| `make logs-db` | Tail logs for PostgreSQL database |
-| `make logs-adminer` | Tail logs for Adminer database web UI (port 8080) |
-| `make shell-client` | Open interactive shell inside Banking Client container |
-| `make shell-backend` | Open interactive bash shell inside backend container |
-| `make shell-frontend` | Open interactive shell inside Nuxt 4 container |
-| `make shell-db` | Open interactive `psql` shell inside PostgreSQL container |
-| `make clean` | Stop stack and purge persistent volumes and network orphans |
+| `make up` / `make down` | Start / stop the dev stack |
+| `make build` / `make restart` | Rebuild images / restart containers |
+| `make seed` | Drop and reseed the database |
+| `make logs`, `make logs-<service>` | Tail logs (`backend`, `frontend`, `client`, `db`, `adminer`) |
+| `make shell-<service>` | Open a shell (`backend`, `frontend`, `client`, `db`) |
+| `make status` | Show container status |
+| `make clean` | Stop and delete all volumes (wipes the database) |
+| `make prod-up` / `make prod-down` | Build and run the production stack (no bind mounts; Adminer disabled) |
