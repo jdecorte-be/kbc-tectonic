@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from '@/components/ui/sidebar'
 
 const navigation = [
-  { title: 'Overview', url: '/', icon: IconDashboard },
+  { title: 'Dashboard', url: '/', icon: IconDashboard },
   { title: 'Clients', url: '/client', icon: IconUsers },
   { title: 'Profiles', url: '/categories', icon: IconTags },
   { title: 'Benchmark', url: '/benchmark', icon: IconChartBar },

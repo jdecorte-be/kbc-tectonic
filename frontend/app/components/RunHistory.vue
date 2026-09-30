@@ -124,7 +124,7 @@ onBeforeUnmount(() => {
         v-else-if="!rows.length"
         class="text-muted-foreground py-4 text-sm"
       >
-        No saved runs yet. {{ kind === 'analysis' ? 'Run an analysis to save the first result.' : 'Start a benchmark to save the first result.' }}
+        {{ kind === 'analysis' ? 'No saved individual analyses yet. Run an analysis to save the first result.' : 'No saved benchmarks yet. Start a benchmark to save the first result.' }}
       </p>
       <ul
         v-else

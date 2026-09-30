@@ -18,6 +18,7 @@ make up
 
 - App: **http://localhost:3000**
 - API docs: **http://localhost:8000/api/docs**
+- Database browser: **http://localhost:8080** (Adminer)
 - Logs: `make logs`
 - Stop: `make down`
 
@@ -43,10 +44,33 @@ Start the frontend in another terminal at the repository root:
 make frontend
 ```
 
-The same URLs apply. Nuxt forwards API requests to `http://127.0.0.1:8000` by default; override this with `NUXT_API_BASE`.
+The app and API URLs are the same. Nuxt forwards API requests to `http://127.0.0.1:8000` by default; override this with `NUXT_API_BASE`.
+
+## Browse the database
+
+`make up` includes Adminer. To start only PostgreSQL and Adminer:
+
+```sh
+make adminer
+make seed     # Populate an empty Docker database with synthetic customers
+```
+
+Open **http://localhost:8080** and log in with:
+
+| Field | Value |
+| --- | --- |
+| System | PostgreSQL |
+| Server | `db` |
+| Username | `postgres` |
+| Password | `postgres` |
+| Database | `kbc` |
+
+Adminer views the Docker PostgreSQL database. Local development uses a separate SQLite database by default; its customers and saved runs will not appear in Adminer.
 
 ## How it works
 
+- The dashboard summarizes observed profiles, cash flow and the latest selected adverts, with interactive customer connections and an **Opt-in only** filter. Filters apply to the full population; the graph shows a labelled sample.
+- Client context explains habits such as **Young investor**, **Saver** and **Student activity** from observed transactions. Saved AI decisions and unanalysed clients are shown separately.
 - Select a customer, run the workflow and inspect their transactions, inferred profile, supporting evidence and adverts.
 - Each Jev category question includes `UNKNOWN`. On `UNKNOWN`, OpenAI may identify a supported category; the registry saves its definition, question and customer assignment for future Jev runs.
 - Insufficient evidence remains `UNKNOWN`. Customers who opted out of personalization receive no adverts.
@@ -60,7 +84,7 @@ make seed COUNT=100        # Choose the population size for a fresh database
 make seed-local COUNT=100  # Force local Python instead of the running Docker backend
 ```
 
-`make seed` uses the running Docker backend when available; otherwise it uses `.venv/bin/python`. It generates transactions and imports the product catalogue without AI calls. Repeating it reuses existing records. To change the population size, configure a fresh `DATABASE_URL`; the command never replaces existing customer evidence. Run it before the first backend startup to choose a custom size.
+`make seed` uses the running Docker backend first. If only Docker PostgreSQL is running, it builds a temporary backend container to seed it. Otherwise it uses `.venv/bin/python`; `make seed-local` always uses the local database configuration (SQLite by default). It generates transactions and imports the product catalogue without AI calls. Repeating it reuses existing records. To change the population size, configure a fresh `DATABASE_URL`; the command never replaces existing customer evidence. Run it before the first backend startup to choose a custom size.
 
 ## Data and persistence
 
@@ -80,7 +104,7 @@ Optional database URLs, source files, models and cost rates are in `.env.example
 | Backend | Python, FastAPI, Pydantic, SQLAlchemy, HTTPX |
 | AI | TypeSafe Jev, OpenAI Responses API |
 | Data | PostgreSQL 16, SQLite, Faker, JSON product catalogue |
-| Tooling | Docker Compose, pnpm, Make |
+| Tooling | Docker Compose, Adminer, pnpm, Make |
 
 ## Checks
 

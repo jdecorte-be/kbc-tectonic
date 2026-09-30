@@ -93,3 +93,125 @@ class BenchmarkResponse(BaseModel):
 class HistoryPage(BaseModel):
     items: list[dict[str, Any]]
     total: int
+
+
+class ObservedSegment(BaseModel):
+    id: str
+    label: str
+    description: str
+    evidence: list[str]
+
+
+class CustomerContext(BaseModel):
+    observation_days: int = Field(ge=0)
+    monthly_income_cents: int = Field(ge=0)
+    savings_cents: int = Field(ge=0)
+    investment_cents: int = Field(ge=0)
+    recurring_payment_count: int = Field(ge=0)
+    summary: str
+
+
+class DashboardAdvert(BaseModel):
+    product_id: str
+    product_name: str
+    title: str
+    reason: str
+    confidence: float = Field(ge=0, le=1)
+
+
+class DashboardCategory(BaseModel):
+    id: str
+    label: str
+
+
+class DashboardAnalysis(BaseModel):
+    status: Literal["not_analyzed", "recommended", "insufficient_information", "no_match", "opt_out", "error"]
+    category: DashboardCategory | None
+    summary: str
+    created_at: str | None
+    source: Literal["analysis", "benchmark"] | None
+    id: str | None
+    ads: list[DashboardAdvert]
+
+
+class DashboardClient(BaseModel):
+    client: ClientSummary
+    segments: list[ObservedSegment]
+    context: CustomerContext
+    analysis: DashboardAnalysis
+
+
+class DashboardClientPage(BaseModel):
+    items: list[DashboardClient]
+    total: int = Field(ge=0)
+
+
+class DashboardSummary(BaseModel):
+    total_clients: int
+    opt_in_count: int
+    opt_out_count: int
+    analyzed_count: int
+    recommended_count: int
+    not_analyzed_count: int
+    abstained_count: int
+    error_count: int
+    selected_ad_count: int
+    total_balance_cents: int
+    total_transactions: int
+
+
+class SegmentCount(BaseModel):
+    id: str
+    label: str
+    count: int
+    description: str
+
+
+class OutcomeCount(BaseModel):
+    id: str
+    label: str
+    count: int
+
+
+class ProductCount(BaseModel):
+    id: str
+    name: str
+    count: int
+
+
+class DashboardCashflow(BaseModel):
+    month: str
+    credit_cents: int
+    debit_cents: int
+
+
+class NetworkNode(BaseModel):
+    id: str
+    label: str
+    kind: Literal["segment", "client", "product"]
+    client_id: str | None = None
+    count: int | None = None
+
+
+class NetworkLink(BaseModel):
+    source: str
+    target: str
+    kind: Literal["segment", "recommendation"]
+
+
+class DashboardNetwork(BaseModel):
+    nodes: list[NetworkNode]
+    links: list[NetworkLink]
+    shown_clients: int
+    total_clients: int
+
+
+class DashboardResponse(BaseModel):
+    summary: DashboardSummary
+    segments: list[SegmentCount]
+    outcomes: list[OutcomeCount]
+    products: list[ProductCount]
+    cashflow: list[DashboardCashflow]
+    clients: DashboardClientPage
+    network: DashboardNetwork
+    generated_at: str

@@ -3,6 +3,7 @@ import { IconArrowUpRight, IconChevronLeft, IconChevronRight, IconLoader2, IconS
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ageLabel, countryName, errorMessage, euros, number, type ClientSummary } from '@/lib/api'
@@ -12,6 +13,7 @@ const api = useKbcApi()
 const clients = ref<ClientSummary[]>([])
 const total = ref(0)
 const search = ref('')
+const optInOnly = ref(false)
 const offset = ref(0)
 const loading = ref(true)
 const error = ref('')
@@ -22,7 +24,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await api.clients(search.value, 30, offset.value)
+    const response = await api.clients(search.value, 30, offset.value, optInOnly.value)
     if (id === requestId) {
       clients.value = response.items
       total.value = response.total
@@ -40,11 +42,17 @@ function next(direction: number) {
   void load()
 }
 watch(search, () => {
+  ++requestId
   clearTimeout(debounce)
   debounce = setTimeout(() => {
     offset.value = 0
     void load()
   }, 250)
+})
+watch(optInOnly, () => {
+  clearTimeout(debounce)
+  offset.value = 0
+  void load()
 })
 onMounted(load)
 onBeforeUnmount(() => {
@@ -65,8 +73,8 @@ onBeforeUnmount(() => {
           <IconUsers /> {{ number(total) }} clients
         </Badge>
       </CardHeader>
-      <div class="px-4">
-        <div class="flex max-w-sm flex-col gap-1.5">
+      <div class="flex flex-wrap items-end gap-4 px-4">
+        <div class="flex w-full max-w-sm flex-col gap-1.5">
           <label
             for="client-search"
             class="text-muted-foreground text-xs font-medium"
@@ -81,6 +89,17 @@ onBeforeUnmount(() => {
             />
           </div>
         </div>
+        <label
+          for="directory-opt-in"
+          class="flex h-9 cursor-pointer items-center gap-2 text-sm"
+        >
+          <Checkbox
+            id="directory-opt-in"
+            :model-value="optInOnly"
+            @update:model-value="optInOnly = $event === true"
+          />
+          Opt-in only
+        </label>
       </div>
       <CardContent>
         <p
@@ -154,7 +173,7 @@ onBeforeUnmount(() => {
                   variant="outline"
                   :class="!client.personalization_allowed && 'text-muted-foreground'"
                 >
-                  {{ client.personalization_allowed ? 'Allowed' : 'Declined' }}
+                  {{ client.personalization_allowed ? 'Opted in' : 'Opted out' }}
                 </Badge>
               </TableCell>
               <TableCell class="text-right">

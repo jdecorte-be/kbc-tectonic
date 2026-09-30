@@ -109,14 +109,14 @@ class BankData:
             self._facts[client_id] = extract_facts(self.get(client_id))
         return self._facts[client_id]
 
-    def list_clients(self, query: str = "", limit: int = 50, offset: int = 0) -> dict:
+    def list_clients(self, query: str = "", limit: int = 50, offset: int = 0, opt_in_only: bool = False) -> dict:
         if self.repository is not None:
-            return self.repository.list_clients(query, limit, offset)
+            return self.repository.list_clients(query, limit, offset, opt_in_only)
         self._pagination(limit, offset)
         query = query.casefold().strip()
-        matching = [item for item in self.summaries if not query or query in " ".join(
+        matching = [item for item in self.summaries if (not opt_in_only or item["personalization_allowed"]) and (not query or query in " ".join(
             str(item[key]) for key in ("id", "name", "city", "country")
-        ).casefold()]
+        ).casefold())]
         return {"items": matching[offset:offset + limit], "total": len(matching)}
 
     def list_transactions(self, client_id: str, limit: int = 50, offset: int = 0) -> dict:

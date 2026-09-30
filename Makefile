@@ -1,4 +1,4 @@
-.PHONY: help setup install up build down logs status backend frontend seed seed-local test check
+.PHONY: help setup install up adminer build down logs status backend frontend seed seed-local test check
 .DEFAULT_GOAL := help
 COUNT ?= 1000
 export PATH := $(CURDIR)/.tools/node/bin:$(CURDIR)/.tools/pnpm/node_modules/.bin:$(PATH)
@@ -16,6 +16,9 @@ install: ## Install Python and Nuxt dependencies (Python 3.11+, Node 22+, pnpm 1
 
 up: setup ## Build and start Docker demo on localhost:3000
 	docker compose up --build -d
+
+adminer: setup ## Start the PostgreSQL browser on localhost:8080
+	docker compose up -d db adminer
 
 build: ## Build Docker images
 	docker compose build
@@ -35,9 +38,15 @@ backend: ## Start FastAPI on localhost:8000
 frontend: ## Start Nuxt on localhost:3000 (another terminal)
 	cd frontend && pnpm dev --host 127.0.0.1 --port 3000
 
-seed: ## Seed synthetic clients; use running Docker backend or local Python (COUNT=1000)
-	@if command -v docker >/dev/null 2>&1 && docker compose ps --status running --services 2>/dev/null | grep -qx backend; then \
+seed: ## Seed synthetic clients; use running Docker services or local Python (COUNT=1000)
+	@running_services=''; \
+	if command -v docker >/dev/null 2>&1; then \
+		running_services=$$(docker compose ps --status running --services 2>/dev/null); \
+	fi; \
+	if printf '%s\n' "$$running_services" | grep -qx backend; then \
 		docker compose exec -T backend python -m app.seed --count "$(COUNT)"; \
+	elif printf '%s\n' "$$running_services" | grep -qx db; then \
+		docker compose run --rm --build --no-deps backend python -m app.seed --count "$(COUNT)"; \
 	else \
 		PYTHONPATH=backend .venv/bin/python -m app.seed --count "$(COUNT)"; \
 	fi

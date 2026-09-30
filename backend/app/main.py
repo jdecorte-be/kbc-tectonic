@@ -14,11 +14,12 @@ from app.banking import BankData, client_summary
 from app.benchmark import BenchmarkBusy, BenchmarkManager
 from app.categories import CategoryRegistry, CategoryService
 from app.crud import BankRepository
+from app.dashboard import DashboardService
 from app.jev import JevClient
 from app.run_store import RunStore
 from app.schemas import (
     AnalysisRequest, AnalysisResponse, BenchmarkRequest, BenchmarkResponse,
-    ClientDetail, ClientPage, HistoryPage, ProductPage, TransactionPage,
+    ClientDetail, ClientPage, DashboardClient, DashboardResponse, HistoryPage, ProductPage, TransactionPage,
 )
 from app.workflow import Workflow
 
@@ -47,6 +48,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
             application.state.data = data
             application.state.repository = repository
             application.state.store = store
+            application.state.dashboard = DashboardService(repository, store)
             application.state.jev = jev
             application.state.workflow = workflow
             application.state.benchmarks = benchmarks
@@ -95,8 +97,26 @@ def create_app(config: Settings | None = None) -> FastAPI:
 
     @application.get("/api/clients", response_model=ClientPage, tags=["Clients"])
     def list_clients(q: str = Query(default="", max_length=100), limit: int = Query(default=50, ge=1, le=1000),
-                     offset: int = Query(default=0, ge=0)):
-        return application.state.data.list_clients(q, limit, offset)
+                     offset: int = Query(default=0, ge=0), opt_in_only: bool = False):
+        return application.state.data.list_clients(q, limit, offset, opt_in_only)
+
+    @application.get("/api/dashboard", response_model=DashboardResponse, response_model_exclude_unset=True, tags=["Dashboard"])
+    def dashboard(q: str = Query(default="", max_length=100), opt_in_only: bool = False,
+                  segment: str = Query(default="", max_length=100), outcome: str = Query(default="", max_length=100),
+                  product: str = Query(default="", max_length=100),
+                  limit: int = Query(default=25, ge=1, le=1000), offset: int = Query(default=0, ge=0)):
+        """Latest saved outcomes and observed facts; this endpoint makes no AI calls.
+
+        Segment options describe the search/consent cohort before segment,
+        outcome and product filtering. All other totals describe the filtered
+        cohort, regardless of pagination. Network counts describe its sample.
+        """
+        return application.state.dashboard.snapshot(q, opt_in_only, segment, outcome, product, limit, offset)
+
+    @application.get("/api/clients/{client_id}/context", response_model=DashboardClient, tags=["Clients"])
+    def client_context(client_id: str):
+        require_client(client_id)
+        return application.state.dashboard.client_context(client_id)
 
     @application.get("/api/clients/{client_id}", response_model=ClientDetail, tags=["Clients"])
     def get_client(client_id: str):

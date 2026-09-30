@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import JSON, ForeignKey, Integer, String, func, select
+from sqlalchemy import JSON, ForeignKey, Integer, String, func, literal, select, union_all
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
@@ -119,7 +119,8 @@ class RunStore:
                 )))
                 for position, result in enumerate(results, start=results_offset):
                     if position not in existing:
-                        session.add(BenchmarkResult(benchmark_id=identifier, position=position, result=result))
+                        session.add(BenchmarkResult(benchmark_id=identifier, position=position,
+                                                    result={**result, "_dashboard_saved_at": now}))
 
     def get_benchmark(self, identifier: str, results_limit: int = 1000, results_offset: int = 0) -> dict:
         _pagination(results_limit, results_offset)
@@ -130,7 +131,7 @@ class RunStore:
             results = session.scalars(select(BenchmarkResult.result).where(
                 BenchmarkResult.benchmark_id == identifier,
             ).order_by(BenchmarkResult.position).limit(results_limit).offset(results_offset)).all()
-            return {**run.snapshot, "results": list(results), "created_at": run.created_at, "updated_at": run.updated_at}
+            return {**run.snapshot, "results": [{key: value for key, value in result.items() if key != "_dashboard_saved_at"} for result in results], "created_at": run.created_at, "updated_at": run.updated_at}
 
     def list_benchmarks(self, limit: int = 50, offset: int = 0) -> dict:
         _pagination(limit, offset)
@@ -141,6 +142,36 @@ class RunStore:
             ).limit(limit).offset(offset))
             items = [{**run.snapshot, "created_at": run.created_at, "updated_at": run.updated_at} for run in rows]
             return {"items": items, "total": total}
+
+    def latest_client_results(self, client_id: str | None = None) -> dict[str, dict]:
+        """One latest result per customer across both kinds of run in one query.
+
+        Benchmark completion timestamps live inside the stored JSON to preserve
+        compatibility with existing databases. They never leak into public run
+        payloads. Older records use their benchmark creation time, rather than a
+        later checkpoint that could incorrectly supersede a newer single run.
+        """
+        singles = select(AnalysisRun.client_id.label("client_id"), AnalysisRun.id.label("id"),
+                         AnalysisRun.created_at.label("created_at"), literal("analysis").label("source"),
+                         AnalysisRun.result.label("result"))
+        batch_client = BenchmarkResult.result["client"]["id"].as_string()
+        batches = select(batch_client.label("client_id"), BenchmarkRun.id.label("id"),
+                         func.coalesce(BenchmarkResult.result["_dashboard_saved_at"].as_string(),
+                                       BenchmarkRun.created_at).label("created_at"),
+                         literal("benchmark").label("source"), BenchmarkResult.result.label("result")).join(
+                             BenchmarkRun, BenchmarkRun.id == BenchmarkResult.benchmark_id)
+        if client_id is not None:
+            singles = singles.where(AnalysisRun.client_id == client_id)
+            batches = batches.where(batch_client == client_id)
+        candidates = union_all(singles, batches).subquery()
+        ranked = select(candidates, func.row_number().over(
+            partition_by=candidates.c.client_id,
+            order_by=(candidates.c.created_at.desc(), candidates.c.id.desc(), candidates.c.source.desc()),
+        ).label("rank")).subquery()
+        with Session(self.engine) as session:
+            rows = session.execute(select(ranked).where(ranked.c.rank == 1)).mappings()
+            return {row["client_id"]: {"id": row["id"], "created_at": row["created_at"],
+                                      "source": row["source"], "result": row["result"]} for row in rows}
 
     def recover_interrupted(self) -> int:
         """Mark unfinished jobs failed; never repeat provider requests on startup."""

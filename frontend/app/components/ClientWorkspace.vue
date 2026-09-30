@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { IconCalendar, IconChevronLeft, IconChevronRight, IconCreditCard, IconFingerprint, IconLoader2, IconPlayerPlay, IconSearch, IconShieldCheck, IconShoppingBag, IconWallet } from '@tabler/icons-vue'
+import ClientContext from '@/components/ClientContext.vue'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ageLabel, analysisSchema, countryName, duration, errorMessage, euros, number, type Analysis, type ClientDetail, type ClientSummary } from '@/lib/api'
@@ -16,6 +18,7 @@ const health = ref<Awaited<ReturnType<typeof api.health>> | null>(null)
 const clients = ref<ClientSummary[]>([])
 const total = ref(0)
 const search = ref('')
+const optInOnly = ref(false)
 const offset = ref(0)
 const listLoading = ref(true)
 const detailLoading = ref(false)
@@ -45,7 +48,7 @@ async function loadClients() {
   listLoading.value = true
   listError.value = ''
   try {
-    const response = await api.clients(search.value, 30, offset.value)
+    const response = await api.clients(search.value, 30, offset.value, optInOnly.value)
     if (request !== listRequest)
       return
     clients.value = response.items
@@ -141,11 +144,17 @@ function changePage(direction: number) {
   void loadClients()
 }
 watch(search, () => {
+  ++listRequest
   clearTimeout(debounce)
   debounce = setTimeout(() => {
     offset.value = 0
     void loadClients()
   }, 250)
+})
+watch(optInOnly, () => {
+  clearTimeout(debounce)
+  offset.value = 0
+  void loadClients()
 })
 onMounted(async () => {
   await Promise.allSettled([
@@ -229,6 +238,18 @@ onBeforeUnmount(() => {
               :disabled="running"
             />
           </div>
+          <label
+            for="workspace-opt-in"
+            class="flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <Checkbox
+              id="workspace-opt-in"
+              :model-value="optInOnly"
+              :disabled="running"
+              @update:model-value="optInOnly = $event === true"
+            />
+            Opt-in only
+          </label>
           <div
             v-if="listError"
             role="alert"
@@ -377,6 +398,13 @@ onBeforeUnmount(() => {
               </span>
             </CardFooter>
           </Card>
+          <ClientContext
+            :client-id="selectedId"
+            :refresh-key="historyRefresh"
+            :loading-saved="savedLoading"
+            :running="running"
+            @open-analysis="loadSavedAnalysis"
+          />
           <ClientFacts :detail="detail" />
         </template>
         <Card

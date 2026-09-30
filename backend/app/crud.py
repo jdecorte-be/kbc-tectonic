@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from sqlalchemy import case, func, insert, or_, select, text
+from sqlalchemy import String, case, cast, func, insert, or_, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -126,19 +126,74 @@ class BankRepository:
             return [{"id": item.id, "name": item.name, "description": item.description}
                     for item in session.scalars(select(Product).order_by(Product.ordinal))]
 
-    def list_clients(self, query: str = "", limit: int = 50, offset: int = 0) -> dict:
+    def list_clients(self, query: str = "", limit: int = 50, offset: int = 0, opt_in_only: bool = False) -> dict:
         self._pagination(limit, offset)
-        query = query.casefold().strip()
-        clauses = []
-        if query:
-            clauses.append(or_(*(func.lower(column).contains(query, autoescape=True) for column in (
-                Customer.id, Customer.name, case(CITIES, value=Customer.city, else_=Customer.city),
-                case(COUNTRIES, value=Customer.country, else_=Customer.country)))))
+        clauses = self._client_filters(query, opt_in_only)
         with Session(self.engine) as session:
             total = session.scalar(select(func.count()).select_from(Customer).where(*clauses)) or 0
             rows = session.execute(select(Customer, Account).join(Account, Account.client_id == Customer.id)
                                    .where(*clauses).order_by(Customer.ordinal).offset(offset).limit(limit))
             return {"items": [self._summary(client, account) for client, account in rows], "total": total}
+
+    @staticmethod
+    def _client_filters(query: str = "", opt_in_only: bool = False, client_id: str | None = None) -> list:
+        clauses = []
+        query = query.casefold().strip()
+        if query:
+            clauses.append(or_(*(func.lower(column).contains(query, autoescape=True) for column in (
+                Customer.id, Customer.name, case(CITIES, value=Customer.city, else_=Customer.city),
+                case(COUNTRIES, value=Customer.country, else_=Customer.country)))))
+        if opt_in_only:
+            clauses.append(Customer.personalization_allowed.is_(True))
+        if client_id is not None:
+            clauses.append(Customer.id == client_id)
+        return clauses
+
+    def dashboard_observations(self, query: str = "", opt_in_only: bool = False,
+                               client_id: str | None = None) -> list[dict]:
+        """Read the cohort and grouped facts in four queries, never full histories.
+
+        All monetary sums stay in integer cents. The month expression works on
+        SQLite and PostgreSQL; no per-customer ORM transaction loads are needed.
+        """
+        clauses = self._client_filters(query, opt_in_only, client_id)
+        month = func.substr(cast(Transaction.booked_date, String), 1, 7)
+        joined = lambda statement: statement.select_from(Transaction).join(
+            Account, Account.id == Transaction.account_id).join(Customer, Customer.id == Account.client_id).where(*clauses)
+        with Session(self.engine) as session:
+            rows = session.execute(select(Customer, Account).join(Account, Account.client_id == Customer.id)
+                                   .where(*clauses).order_by(Customer.ordinal))
+            observations = {client.id: {"client": self._summary(client, account),
+                                       "balance_cents": account.balance_cents,
+                                       "observation_start": account.observation_start,
+                                       "observation_end": account.observation_end,
+                                       "categories": [], "monthly": [], "recurring_payment_count": 0}
+                            for client, account in rows}
+            if not observations:
+                return []
+            category_query = joined(select(
+                Account.client_id, Transaction.category, Transaction.direction,
+                func.count(), func.sum(Transaction.amount_cents), func.min(Transaction.id),
+            )).group_by(Account.client_id, Transaction.category, Transaction.direction)
+            for identifier, category, direction, count, amount, evidence in session.execute(category_query):
+                observations[identifier]["categories"].append({"category": category, "direction": direction,
+                                                              "count": count, "amount_cents": int(amount), "evidence": evidence})
+            monthly_query = joined(select(
+                Account.client_id, month.label("month"),
+                func.sum(case((Transaction.direction == "credit", Transaction.amount_cents), else_=0)),
+                func.sum(case((Transaction.direction == "debit", Transaction.amount_cents), else_=0)),
+            )).group_by(Account.client_id, month).order_by(month)
+            for identifier, value, credit, debit in session.execute(monthly_query):
+                observations[identifier]["monthly"].append({"month": value, "credit_cents": int(credit), "debit_cents": int(debit)})
+            recurring_query = joined(select(Account.client_id, Transaction.merchant, Transaction.category)).where(
+                Transaction.direction == "debit",
+            ).group_by(Account.client_id, Transaction.merchant, Transaction.category).having(
+                func.count(func.distinct(month)) >= 2,
+                func.max(case((Transaction.transaction_type.in_(["domiciliation", "ordre_permanent"]), 1), else_=0)) == 1,
+            )
+            for identifier, _merchant, _category in session.execute(recurring_query):
+                observations[identifier]["recurring_payment_count"] += 1
+            return list(observations.values())
 
     def get_client(self, client_id: str) -> dict:
         with Session(self.engine) as session:
