@@ -1,20 +1,7 @@
 <script setup lang="ts">
-import {
-  IconBell,
-  IconChartBar,
-  IconDashboard,
-  IconGift,
-  IconHelp,
-  IconReport,
-  IconSearch,
-  IconSettings,
-  IconTags,
-  IconUsers
-} from '@tabler/icons-vue'
+import { IconBell, IconChartBar, IconDashboard, IconTags, IconUsers } from '@tabler/icons-vue'
 
-import NavDocuments from '@/components/NavDocuments.vue'
 import NavMain from '@/components/NavMain.vue'
-import NavSecondary from '@/components/NavSecondary.vue'
 import NavUser from '@/components/NavUser.vue'
 import {
   Sidebar,
@@ -30,32 +17,11 @@ const data = {
     avatar: '/avatars/shadcn.jpg'
   },
   navMain: [
-    { title: 'Overview', url: '#', icon: IconDashboard },
-    { title: 'Clients', url: '#', icon: IconUsers },
-    { title: 'Profiles', url: '#', icon: IconTags },
-    { title: 'Habits', url: '#', icon: IconChartBar },
-    { title: 'Alerts', url: '#', icon: IconBell }
-  ],
-  navSecondary: [
-    {
-      title: 'Settings',
-      url: '#',
-      icon: IconSettings
-    },
-    {
-      title: 'Get Help',
-      url: '#',
-      icon: IconHelp
-    },
-    {
-      title: 'Search',
-      url: '#',
-      icon: IconSearch
-    }
-  ],
-  documents: [
-    { name: 'Offers', url: '#', icon: IconGift },
-    { name: 'Reports', url: '#', icon: IconReport }
+    { title: 'Overview', url: '/', icon: IconDashboard },
+    { title: 'Clients', url: '/client', icon: IconUsers },
+    { title: 'Profiles', url: '/profiles', icon: IconTags },
+    { title: 'Habits', url: '/habits', icon: IconChartBar },
+    { title: 'Alerts', url: '/alerts', icon: IconBell }
   ]
 }
 </script>
@@ -81,11 +47,6 @@ const data = {
     </SidebarHeader>
     <SidebarContent>
       <NavMain :items="data.navMain" />
-      <NavDocuments :items="data.documents" />
-      <NavSecondary
-        :items="data.navSecondary"
-        class="mt-auto"
-      />
     </SidebarContent>
     <SidebarFooter>
       <NavUser :user="data.user" />

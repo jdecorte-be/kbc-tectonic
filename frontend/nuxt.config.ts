@@ -14,6 +14,15 @@ export default defineNuxtConfig({
     fallback: 'dark'
   },
 
+  app: {
+    head: {
+      link: [
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }
+      ]
+    }
+  },
+
   css: ['~/assets/css/main.css'],
 
   routeRules: {

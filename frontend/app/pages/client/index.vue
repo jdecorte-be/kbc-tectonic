@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import ClientTable from '@/components/ClientTable.vue'
-import { Badge } from '@/components/ui/badge'
-import { PROFILES, clients, primaryProfile } from '@/data/mock'
+import { clients, primaryProfile } from '@/data/mock'
 import type { Client } from '@/data/mock'
 
 definePageMeta({ title: 'Clients' })
@@ -39,14 +38,5 @@ const open = (c: Client) => navigateTo(`/client/${c.id}`)
     <div class="px-4 lg:px-6">
       <ClientTable @select="open" />
     </div>
-    <p class="text-muted-foreground px-4 text-xs lg:px-6">
-      Profiles: {{ Object.values(PROFILES).map((p) => p.label).join(' · ') }}
-      <Badge
-        variant="outline"
-        class="ml-1"
-      >
-        Synthetic data
-      </Badge>
-    </p>
   </div>
 </template>

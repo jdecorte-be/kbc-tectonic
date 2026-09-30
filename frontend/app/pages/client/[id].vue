@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartCrosshair, ChartTooltip, ChartTooltipContent, componentToString } from '@/components/ui/chart'
-import { PROFILES, getClient } from '@/data/mock'
+import { PROFILES, getClient, relatedClients } from '@/data/mock'
 
 const route = useRoute()
 const client = getClient(String(route.params.id))
@@ -35,6 +35,17 @@ const tiles = [
   { label: 'Cash share', value: `${client.cashShare}%` }
 ]
 
+const related = relatedClients(client)
+
+const lastScanned = new Date(client.lastScanned).toLocaleString('en-BE', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
+
+// Radial relation graph: client in the centre, related clients on a ring.
+const GRAPH = { w: 640, h: 320, r: 120 }
+const nodes = related.map((r, i) => {
+  const a = (2 * Math.PI * i) / related.length - Math.PI / 2
+  return { ...r, x: GRAPH.w / 2 + GRAPH.r * 1.6 * Math.cos(a), y: GRAPH.h / 2 + GRAPH.r * Math.sin(a) }
+})
+
 useSeoMeta({ title: client.name })
 </script>
 
@@ -59,6 +70,9 @@ useSeoMeta({ title: client.name })
         </h2>
         <p class="text-muted-foreground text-sm">
           {{ client.age }} years · payday on the {{ client.payday }}th · top habit: {{ client.topHabit }}
+        </p>
+        <p class="text-muted-foreground text-xs">
+          Last scanned: {{ lastScanned }} UTC
         </p>
       </div>
       <div class="flex flex-wrap gap-1 sm:ml-auto">
@@ -173,7 +187,7 @@ useSeoMeta({ title: client.name })
       </Card>
     </div>
 
-    <div class="grid gap-4 lg:grid-cols-2">
+    <div class="grid gap-4">
       <Card>
         <CardHeader>
           <CardTitle>Why this profile</CardTitle>
@@ -198,31 +212,121 @@ useSeoMeta({ title: client.name })
           </div>
         </CardContent>
       </Card>
+    </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent transactions</CardTitle>
-          <CardDescription>Latest activity</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul class="divide-y text-sm">
-            <li
+    <Card>
+      <CardHeader>
+        <CardTitle>Related clients</CardTitle>
+        <CardDescription>Linked accounts and clients with a similar profile</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p
+          v-if="!related.length"
+          class="text-muted-foreground text-sm"
+        >
+          No related clients.
+        </p>
+        <svg
+          v-if="related.length"
+          :viewBox="`0 0 ${GRAPH.w} ${GRAPH.h}`"
+          class="mb-4 h-auto w-full max-w-2xl"
+          role="img"
+          aria-label="Relation graph"
+        >
+          <line
+            v-for="n in nodes"
+            :key="`l-${n.client.id}`"
+            :x1="GRAPH.w / 2"
+            :y1="GRAPH.h / 2"
+            :x2="n.x"
+            :y2="n.y"
+            class="stroke-primary"
+            :stroke-width="n.kind === 'linked' ? 2.5 : 1"
+            :stroke-dasharray="n.kind === 'linked' ? undefined : '4 4'"
+          />
+          <NuxtLink
+            v-for="n in nodes"
+            :key="n.client.id"
+            :to="`/client/${n.client.id}`"
+          >
+            <circle
+              :cx="n.x"
+              :cy="n.y"
+              r="9"
+              class="fill-background stroke-primary"
+              stroke-width="2"
+            />
+            <text
+              :x="n.x"
+              :y="n.y + 24"
+              text-anchor="middle"
+              class="fill-foreground text-[11px]"
+            >{{ n.client.name }}</text>
+          </NuxtLink>
+          <circle
+            :cx="GRAPH.w / 2"
+            :cy="GRAPH.h / 2"
+            r="14"
+            class="fill-primary"
+          />
+          <text
+            :x="GRAPH.w / 2"
+            :y="GRAPH.h / 2 + 30"
+            text-anchor="middle"
+            class="fill-foreground text-xs font-semibold"
+          >{{ client.name }}</text>
+        </svg>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <NuxtLink
+            v-for="r in related"
+            :key="r.client.id"
+            :to="`/client/${r.client.id}`"
+            class="hover:bg-muted/50 flex flex-col gap-2 rounded-xl border p-3 transition-colors"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-medium">{{ r.client.name }}</span>
+              <Badge :variant="r.kind === 'linked' ? 'default' : 'outline'">
+                {{ r.kind === 'linked' ? 'Linked' : 'Similar' }}
+              </Badge>
+            </div>
+            <span class="text-muted-foreground text-xs">{{ PROFILES[r.client.profiles[0]!.id].label }} · {{ r.client.age }} y</span>
+            <span class="text-xs">{{ r.reason }}</span>
+          </NuxtLink>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle>Transactions</CardTitle>
+        <CardDescription>{{ client.transactions.length }} most recent</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <table class="w-full text-sm">
+          <thead class="text-muted-foreground text-left text-xs">
+            <tr>
+              <th class="py-2 font-medium">Date</th>
+              <th class="py-2 font-medium">Merchant</th>
+              <th class="py-2 font-medium">Category</th>
+              <th class="py-2 text-right font-medium">Amount</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            <tr
               v-for="t in client.transactions"
               :key="t.date + t.merchant"
-              class="flex justify-between gap-3 py-2"
             >
-              <span>
-                {{ t.merchant }}
-                <span class="text-muted-foreground block text-xs">{{ t.category }} · {{ t.date }}</span>
-              </span>
-              <span
-                class="tabular-nums"
+              <td class="py-2 tabular-nums">{{ t.date }}</td>
+              <td class="py-2">{{ t.merchant }}</td>
+              <td class="text-muted-foreground py-2">{{ t.category }}</td>
+              <td
+                class="py-2 text-right tabular-nums"
                 :class="t.amount > 0 && 'text-primary'"
-              >{{ eur(t.amount) }}</span>
-            </li>
-          </ul>
-        </CardContent>
-      </Card>
-    </div>
+              >{{ eur(t.amount) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
   </div>
 </template>
