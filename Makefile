@@ -1,63 +1,41 @@
-.PHONY: help build up down restart logs logs-backend logs-frontend logs-db status ps clean shell-backend shell-frontend shell-db setup
-
-# Default target
+.PHONY: help setup install up build down logs status backend frontend test check
 .DEFAULT_GOAL := help
+export PATH := $(CURDIR)/.tools/node/bin:$(CURDIR)/.tools/pnpm/node_modules/.bin:$(PATH)
 
-help: ## Show available commands
-	@echo "Usage: make [target]"
-	@echo ""
-	@echo "Targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+help: ## KBC + Jev demo commands
+	@awk 'BEGIN {FS = ":.*?## "}; /^[a-zA-Z_-]+:.*?## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-setup: ## Copy environment variables template if .env does not exist
-	@if [ ! -f .env ]; then \
-		cp .env.example .env; \
-		echo ".env file created from .env.example"; \
-	else \
-		echo ".env file already exists"; \
-	fi
+setup: ## Create .env if absent (exported keys also work)
+	@test -f .env || cp .env.example .env
 
-build: setup ## Build or rebuild all services
+install: ## Install Python and Nuxt dependencies (Python 3.11+, Node 22+, pnpm 12)
+	python3 -m venv .venv
+	.venv/bin/python -m pip install -r backend/requirements.txt
+	cd frontend && pnpm install --frozen-lockfile
+
+up: setup ## Build and start Docker demo on localhost:3000
+	docker compose up --build -d
+
+build: ## Build Docker images
 	docker compose build
 
-up: setup ## Start all services in detached mode
-	docker compose up -d
-
-start: up ## Alias for 'up'
-
-down: ## Stop all services
+down: ## Stop containers
 	docker compose down
 
-stop: down ## Alias for 'down'
-
-restart: ## Restart all services
-	docker compose restart
-
-logs: ## Tail logs for all services
+logs: ## Follow logs
 	docker compose logs -f
 
-logs-backend: ## Tail logs for backend service
-	docker compose logs -f backend
-
-logs-frontend: ## Tail logs for frontend service
-	docker compose logs -f frontend
-
-logs-db: ## Tail logs for database service
-	docker compose logs -f db
-
-status: ## Show status of running services
+status: ## Show container status
 	docker compose ps
 
-ps: status ## Alias for 'status'
+backend: ## Start FastAPI on localhost:8000
+	.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 
-clean: ## Stop services and remove volumes, networks, and orphan containers
-	docker compose down -v --remove-orphans
+frontend: ## Start Nuxt on localhost:3000 (another terminal)
+	cd frontend && pnpm dev --host 127.0.0.1 --port 3000
 
-shell-backend: ## Open bash shell inside backend container
-	docker compose exec backend bash
+test: ## Test the workflow and adapters without paid API calls
+	PYTHONPATH=backend .venv/bin/python -m unittest discover -s backend/tests -v
 
-shell-frontend: ## Open sh shell inside frontend container
-	docker compose exec frontend sh
-
-shell-db: ## Open psql interactive shell inside PostgreSQL container
-	docker compose exec db psql -U postgres -d tododb
+check: test ## Typecheck and build the frontend
+	cd frontend && pnpm typecheck && pnpm build

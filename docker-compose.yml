@@ -1,71 +1,41 @@
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: todo_db
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-tododb}
-    ports:
-      - "${POSTGRES_PORT:-5433}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tododb}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
-
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: todo_backend
-    restart: unless-stopped
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/tododb}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}
+      JEV_API: ${JEV_API:-}
+      JEV_API_URL: ${JEV_API_URL:-https://api.typesafe.ai/v1/systemone}
+      JEV_MODEL: ${JEV_MODEL:-jev-latest}
+      JEV_INPUT_USD_PER_MILLION: ${JEV_INPUT_USD_PER_MILLION:-0.042}
+      JEV_OUTPUT_USD_PER_MILLION: ${JEV_OUTPUT_USD_PER_MILLION:-0}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      OPENAI_INPUT_USD_PER_MILLION: ${OPENAI_INPUT_USD_PER_MILLION:-0.40}
+      OPENAI_OUTPUT_USD_PER_MILLION: ${OPENAI_OUTPUT_USD_PER_MILLION:-1.60}
+      CATEGORY_DB_PATH: /workspace/data/categories.sqlite3
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     volumes:
-      - ./backend:/app
-    depends_on:
-      db:
-        condition: service_healthy
+      - category_data:/workspace/data
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/api/health\")'"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - app-network
-
+      start_period: 30s
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: todo_frontend
-    restart: unless-stopped
     ports:
-      - "5173:5173"
+      - "127.0.0.1:3000:3000"
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      NUXT_API_BASE: http://backend:8000
     depends_on:
       backend:
         condition: service_healthy
-    networks:
-      - app-network
 
 volumes:
-  postgres_data:
-    driver: local
-
-networks:
-  app-network:
-    driver: bridge
+  category_data:

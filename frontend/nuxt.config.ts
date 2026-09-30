@@ -16,8 +16,10 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
-  routeRules: {
-    '/': { prerender: true }
+  components: [{ path: '~/components', extensions: ['vue'] }],
+
+  runtimeConfig: {
+    apiBase: 'http://127.0.0.1:8000'
   },
 
   compatibilityDate: '2026-06-30',

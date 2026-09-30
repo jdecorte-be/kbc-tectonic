@@ -12,7 +12,8 @@ useHead({
 })
 
 useSeoMeta({
-  title: 'Dashboard'
+  title: 'KBC Tectonic — Customer intelligence',
+  description: 'Synthetic customer analysis, explained recommendations and scalability measurements with Jev.'
 })
 </script>
 

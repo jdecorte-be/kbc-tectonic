@@ -17,3 +17,11 @@ coverage/
 .env.local
 .env.*.local
 .DS_Store
+.env
+.tools/
+frontend/.nuxt/
+frontend/.output/
+profils_bancaires_synthetiques_*.json
+profils_bancaires_synthetiques_*.zip
+data/
+*.sqlite3*

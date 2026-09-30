@@ -34,3 +34,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local runtimes, generated datasets, and build output
+.venv/
+.tools/
+__pycache__/
+*.pyc
+.pytest_cache/
+frontend/node_modules/
+frontend/.nuxt/
+frontend/.output/
+profils_bancaires_synthetiques_*.json
+profils_bancaires_synthetiques_*.zip
+apercu_5_profils.json
+statistiques_profils.json
+LIRE_MOI_profils.txt
+data/
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal

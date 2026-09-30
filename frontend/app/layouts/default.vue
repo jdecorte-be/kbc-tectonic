@@ -7,7 +7,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 <template>
   <SidebarProvider
     :style="{
-      '--sidebar-width': 'calc(var(--spacing) * 72)',
+      '--sidebar-width': 'calc(var(--spacing) * 66)',
       '--header-height': 'calc(var(--spacing) * 12)'
     }"
   >
@@ -16,7 +16,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
       <SiteHeader />
       <div class="flex flex-1 flex-col">
         <div class="@container/main flex flex-1 flex-col gap-2">
-          <div class="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+          <div class="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 lg:px-8 lg:py-8">
             <slot />
           </div>
         </div>
