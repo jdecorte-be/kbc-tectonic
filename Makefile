@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs logs-backend logs-frontend logs-db status ps clean shell-backend shell-frontend shell-db setup
+.PHONY: help build up down restart logs logs-backend logs-frontend logs-db logs-adminer status ps clean shell-backend shell-frontend shell-db seed setup
 
 # Default target
 .DEFAULT_GOAL := help
@@ -44,6 +44,12 @@ logs-frontend: ## Tail logs for frontend service
 
 logs-db: ## Tail logs for database service
 	docker compose logs -f db
+
+logs-adminer: ## Tail logs for adminer service
+	docker compose logs -f adminer
+
+seed: ## Seed database with sample users and transactions
+	docker compose exec -T backend python -m app.seed --force
 
 status: ## Show status of running services
 	docker compose ps
