@@ -1,4 +1,4 @@
-.PHONY: backend frontend help build up down restart logs logs-backend logs-frontend logs-db logs-adminer status ps clean shell-backend shell-frontend shell-db seed setup
+.PHONY: help build up down restart logs logs-backend logs-frontend logs-db logs-adminer status ps clean shell-backend shell-frontend shell-db seed setup
 
 # Default target
 .DEFAULT_GOAL := help
@@ -67,9 +67,3 @@ shell-frontend: ## Open sh shell inside frontend container
 
 shell-db: ## Open psql interactive shell inside PostgreSQL container
 	docker compose exec db psql -U postgres -d tododb
-
-backend: ## Run the backend locally with hot reload (http://localhost:8000)
-	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-frontend: ## Run the frontend dev server locally
-	cd frontend && pnpm dev
