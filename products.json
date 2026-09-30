@@ -1,0 +1,42 @@
+[
+  {
+    "name": "KBC Start2Save Savings Account",
+    "description": "A savings account for setting aside money automatically each month."
+  },
+  {
+    "name": "KBC Investment Plan",
+    "description": "A plan for investing regularly in funds."
+  },
+  {
+    "name": "Invest Your Spare Change",
+    "description": "A service that rounds up payments and invests the difference."
+  },
+  {
+    "name": "KBC Pension Savings Fund",
+    "description": "A fund for building additional savings for retirement."
+  },
+  {
+    "name": "KBC Mortgage Loan",
+    "description": "A loan for buying, building, or renovating a home."
+  },
+  {
+    "name": "KBC Home Insurance",
+    "description": "Insurance for a home and its contents, depending on the coverage selected."
+  },
+  {
+    "name": "KBC Energy Loan",
+    "description": "A loan for home improvements that increase energy efficiency."
+  },
+  {
+    "name": "KBC Bicycle or Scooter Loan",
+    "description": "A loan for purchasing a bicycle or scooter."
+  },
+  {
+    "name": "KBC Car Insurance",
+    "description": "Car insurance with coverage options suited to the vehicle and driver."
+  },
+  {
+    "name": "KBC Travel Insurance",
+    "description": "Insurance coverage for a single trip or multiple trips during the year."
+  }
+]
