@@ -29,7 +29,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/tododb}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000}
     volumes:
       - ./backend:/app
     depends_on:
@@ -50,12 +50,15 @@ services:
     container_name: todo_frontend
     restart: unless-stopped
     ports:
-      - "5173:5173"
+      - "3000:3000"
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-http://localhost:8000}
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      - /app/.nuxt
     depends_on:
       backend:
         condition: service_healthy
