@@ -1,0 +1,15 @@
+# Nixpacks build (Railway / Coolify / `nixpacks build ./client-app`)
+# The app calls relative /api/*; `vite preview` proxies it to the backend.
+# Required env: VITE_API_INTERNAL_URL = backend URL reachable from this service
+
+[variables]
+NIXPACKS_NODE_VERSION = "20"
+
+[phases.install]
+cmds = ["npm install --include=dev"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npx vite preview --host 0.0.0.0 --port ${PORT:-3001}"

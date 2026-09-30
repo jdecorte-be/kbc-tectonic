@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Transaction } from '../types';
-import { ArrowDownLeft, ArrowUpRight, CreditCard, RefreshCw } from 'lucide-react';
+import { ArrowDownLeft, CreditCard, RefreshCw } from 'lucide-react';
 
 interface Props {
   transactions: Transaction[];

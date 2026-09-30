@@ -23,6 +23,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: dev
     container_name: todo_backend
     restart: unless-stopped
     ports:
@@ -50,6 +51,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: dev
     container_name: todo_frontend
     restart: unless-stopped
     ports:
@@ -72,6 +74,7 @@ services:
     build:
       context: ./client-app
       dockerfile: Dockerfile
+      target: dev
     container_name: banking_client_frontend
     restart: unless-stopped
     ports:

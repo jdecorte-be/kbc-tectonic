@@ -1,0 +1,15 @@
+# Nixpacks build (Railway / Coolify / `nixpacks build ./frontend`)
+# Required env: NUXT_PUBLIC_API_BASE = public URL of the backend (read at runtime)
+
+[variables]
+NODE_ENV = "production"
+NIXPACKS_NODE_VERSION = "20"
+
+[phases.install]
+cmds = ["corepack enable", "pnpm install --frozen-lockfile --prod=false"]
+
+[phases.build]
+cmds = ["pnpm build"]
+
+[start]
+cmd = "HOST=0.0.0.0 PORT=${PORT:-3000} node .output/server/index.mjs"

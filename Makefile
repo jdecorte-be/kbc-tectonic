@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs logs-backend logs-frontend logs-client logs-db logs-adminer status ps clean shell-backend shell-frontend shell-client shell-db seed setup
+.PHONY: help prod-build prod-up prod-down prod-logs build up down restart logs logs-backend logs-frontend logs-client logs-db logs-adminer status ps clean shell-backend shell-frontend shell-client shell-db seed setup
 
 # Default target
 .DEFAULT_GOAL := help
@@ -24,6 +24,20 @@ up: setup ## Start all services in detached mode
 	docker compose up -d
 
 start: up ## Alias for 'up'
+
+PROD_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.prod.yml
+
+prod-build: setup ## Build production images
+	$(PROD_COMPOSE) build
+
+prod-up: setup ## Build and start the production stack
+	$(PROD_COMPOSE) up -d --build
+
+prod-down: ## Stop the production stack
+	$(PROD_COMPOSE) down
+
+prod-logs: ## Tail production logs
+	$(PROD_COMPOSE) logs -f
 
 down: ## Stop all services
 	docker compose down
