@@ -1,20 +1,21 @@
 <script setup lang="ts">
 import ClientTable from '@/components/ClientTable.vue'
-import { clients, primaryProfile } from '@/data/mock'
-import type { Client } from '@/data/mock'
+import { primaryProfile } from '@/lib/profileColor'
+import type { Client } from '@/types/api'
 
 definePageMeta({ title: 'Clients' })
 
-const flagged = clients.filter(c => c.change && c.change.severity !== 'info').length
-const multi = clients.filter(c => c.profiles.length > 1).length
-const avgConf = Math.round(clients.reduce((a, c) => a + primaryProfile(c).confidence, 0) / clients.length)
+const clients = await useClients()
+const flagged = computed(() => clients.value.filter(c => c.change && c.change.severity !== 'info').length)
+const multi = computed(() => clients.value.filter(c => c.profiles.length > 1).length)
+const avgConf = computed(() => clients.value.length ? Math.round(clients.value.reduce((a, c) => a + primaryProfile(c).confidence, 0) / clients.value.length) : 0)
 
-const stats = [
-  { label: 'Clients', value: clients.length },
-  { label: 'Need attention', value: flagged },
-  { label: 'Multiple profiles', value: multi },
-  { label: 'Avg. confidence', value: `${avgConf}%` }
-]
+const stats = computed(() => [
+  { label: 'Clients', value: clients.value.length },
+  { label: 'Need attention', value: flagged.value },
+  { label: 'Multiple profiles', value: multi.value },
+  { label: 'Avg. confidence', value: `${avgConf.value}%` }
+])
 
 const open = (c: Client) => navigateTo(`/client/${c.id}`)
 </script>

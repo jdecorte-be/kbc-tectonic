@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { segmentCounts } from '@/data/mock'
-
-const max = Math.max(...segmentCounts.map(s => s.count))
-const total = segmentCounts.reduce((a, s) => a + s.count, 0)
+const dash = await useDashboard()
+const segmentCounts = computed(() => dash.value?.segments ?? [])
+const max = computed(() => Math.max(1, ...segmentCounts.value.map(s => s.count)))
+const total = computed(() => segmentCounts.value.reduce((a, s) => a + s.count, 0))
 </script>
 
 <template>

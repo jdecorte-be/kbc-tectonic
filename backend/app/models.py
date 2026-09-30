@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -51,3 +51,17 @@ class Transaction(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="transactions")
+
+class ClientRecord(Base):
+    """Profiled client (habit/profile analysis result) stored as the JSON shape the dashboard consumes."""
+    __tablename__ = "client_records"
+
+    id = Column(String(20), primary_key=True)
+    payload = Column(JSON, nullable=False)
+
+class DashboardMeta(Base):
+    """Precomputed dashboard aggregates: kpis, segments, habitTrends, weekdayRhythm, links, jev."""
+    __tablename__ = "dashboard_meta"
+
+    key = Column(String(50), primary_key=True)
+    payload = Column(JSON, nullable=False)

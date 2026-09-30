@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { PROFILES, clients, primaryProfile } from '@/data/mock'
-import type { Client } from '@/data/mock'
+import { primaryProfile } from '@/lib/profileColor'
+import type { Client } from '@/types/api'
 
 const props = withDefaults(defineProps<{ limit?: number }>(), { limit: 6 })
 const emit = defineEmits<{ select: [client: Client] }>()
 
 const order = { alert: 0, watch: 1, info: 2 }
-const alerts = clients
+const clients = await useClients()
+const profiles = await useProfiles()
+const alerts = computed(() => clients.value
   .filter(c => c.change)
   .sort((a, b) => order[a.change!.severity] - order[b.change!.severity])
-  .slice(0, props.limit)
+  .slice(0, props.limit))
 
 const variant = (s: string) => (s === 'alert' ? 'destructive' : s === 'watch' ? 'secondary' : 'outline')
 </script>
@@ -38,7 +40,7 @@ const variant = (s: string) => (s === 'alert' ? 'destructive' : s === 'watch' ? 
         </div>
         <span class="text-muted-foreground">{{ c.change!.text }}</span>
         <span class="text-xs">
-          Profile: {{ PROFILES[primaryProfile(c).id].label }}
+          Profile: {{ profiles[primaryProfile(c).id].label }}
         </span>
       </button>
     </CardContent>

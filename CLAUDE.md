@@ -72,8 +72,11 @@ pnpm dev          # dev server
 pnpm build
 pnpm lint
 pnpm typecheck
+pnpm gen:api     # regenerate app/types/api.gen.ts from the backend OpenAPI spec (backend must be running)
 npx shadcn-vue@latest add <component>   # add a UI component
 ```
+
+API types come only from the backend OpenAPI spec (`/api/openapi.json`, docs at `/api/docs`): add a Pydantic `response_model` in `backend/app/schemas.py`, run `pnpm gen:api`, and import aliases from `@/types/api`. Fetch via composables in `app/composables/useApi.ts`.
 
 ## KBC theme
 

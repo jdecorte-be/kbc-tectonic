@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { IconBell, IconChartBar, IconDashboard, IconTags, IconUsers } from '@tabler/icons-vue'
+import { IconBell, IconChartBar, IconDashboard, IconGraph, IconTags, IconUsers } from '@tabler/icons-vue'
 
 import NavMain from '@/components/NavMain.vue'
 import NavUser from '@/components/NavUser.vue'
@@ -20,6 +20,7 @@ const data = {
     { title: 'Overview', url: '/', icon: IconDashboard },
     { title: 'Clients', url: '/client', icon: IconUsers },
     { title: 'Profiles', url: '/profiles', icon: IconTags },
+    { title: 'Graph', url: '/graph', icon: IconGraph },
     { title: 'Habits', url: '/habits', icon: IconChartBar },
     { title: 'Alerts', url: '/alerts', icon: IconBell }
   ]

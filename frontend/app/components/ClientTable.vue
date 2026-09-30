@@ -6,11 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { PROFILES, PROFILE_IDS, clients, primaryProfile } from '@/data/mock'
-import type { Client } from '@/data/mock'
+import { primaryProfile } from '@/lib/profileColor'
+import { PROFILE_IDS } from '@/types/api'
+import type { Client } from '@/types/api'
 
 const emit = defineEmits<{ select: [client: Client] }>()
 
+const clients = await useClients()
+const profiles = await useProfiles()
 const query = ref('')
 
 interface FilterDef {
@@ -21,8 +24,8 @@ interface FilterDef {
 }
 
 const filters: FilterDef[] = [
-  { key: 'profile', label: 'Profile', all: 'All profiles', options: PROFILE_IDS.map(id => ({ value: id, label: PROFILES[id].label })) },
-  { key: 'habit', label: 'Top habit', all: 'All habits', options: [...new Set(clients.map(c => c.topHabit))].sort().map(h => ({ value: h, label: h })) },
+  { key: 'profile', label: 'Profile', all: 'All profiles', options: PROFILE_IDS.map(id => ({ value: id, label: profiles.value[id].label })) },
+  { key: 'habit', label: 'Top habit', all: 'All habits', options: [...new Set(clients.value.map(c => c.topHabit))].sort().map(h => ({ value: h, label: h })) },
   {
     key: 'change',
     label: 'Habit change',
@@ -71,7 +74,7 @@ const reset = () => {
 }
 
 const rows = computed(() =>
-  clients.filter((c) => {
+  clients.value.filter((c) => {
     if (!c.name.toLowerCase().includes(query.value.toLowerCase())) return false
     if (values.profile !== 'all' && !c.profiles.some(p => p.id === values.profile)) return false
     if (values.habit !== 'all' && c.topHabit !== values.habit) return false
@@ -209,7 +212,7 @@ function trend(c: Client) {
                   :key="p.id"
                   :variant="p === c.profiles[0] ? 'default' : 'outline'"
                 >
-                  {{ PROFILES[p.id].label }} {{ p.confidence }}%
+                  {{ profiles[p.id].label }} {{ p.confidence }}%
                 </Badge>
               </div>
             </TableCell>
@@ -234,7 +237,7 @@ function trend(c: Client) {
                 class="text-muted-foreground"
               >Stable</span>
             </TableCell>
-            <TableCell>{{ PROFILES[primaryProfile(c).id].offer }}</TableCell>
+            <TableCell>{{ profiles[primaryProfile(c).id].offer }}</TableCell>
           </TableRow>
           <TableEmpty
             v-if="!rows.length"

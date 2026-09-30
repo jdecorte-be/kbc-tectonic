@@ -4,6 +4,7 @@ import betterTailwindcss from 'eslint-plugin-better-tailwindcss'
 import { getDefaultAttributes } from 'eslint-plugin-better-tailwindcss/api/defaults'
 
 export default withNuxt(
+  { ignores: ['app/types/api.gen.ts'] },
   betterTailwindcss.configs['correctness-error'],
   {
     settings: {

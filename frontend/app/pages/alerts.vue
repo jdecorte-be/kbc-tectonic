@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import HabitAlerts from '@/components/HabitAlerts.vue'
-import type { Client } from '@/data/mock'
+import type { Client } from '@/types/api'
 
 definePageMeta({ title: 'Alerts' })
 

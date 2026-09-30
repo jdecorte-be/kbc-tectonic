@@ -9,15 +9,13 @@ import {
   ChartTooltipContent,
   componentToString
 } from '@/components/ui/chart'
-import { weekdayRhythm } from '@/data/mock'
-
-type Row = typeof weekdayRhythm[number]
+type Row = { day: string, spend: number }
 
 const chartConfig = {
   spend: { label: 'Avg spend (€)', color: 'var(--chart-1)' }
 } satisfies ChartConfig
 
-const data = weekdayRhythm
+const data = (await useDashboard()).value?.weekdayRhythm ?? []
 </script>
 
 <template>

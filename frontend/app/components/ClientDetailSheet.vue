@@ -2,11 +2,11 @@
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { PROFILES } from '@/data/mock'
-import type { Client } from '@/data/mock'
+import type { Client } from '@/types/api'
 
 const props = defineProps<{ client: Client | null }>()
 const open = defineModel<boolean>('open', { default: false })
+const profiles = await useProfiles()
 
 const eur = (n: number) => `${n < 0 ? '-' : n > 0 ? '+' : ''}€${Math.abs(n).toLocaleString('en-BE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 const maxSpend = computed(() => Math.max(...(props.client?.monthlySpend ?? [1])))
@@ -39,7 +39,7 @@ const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
               class="grid gap-1"
             >
               <div class="flex justify-between text-sm">
-                <span>{{ PROFILES[p.id].label }}</span>
+                <span>{{ profiles[p.id].label }}</span>
                 <span class="text-muted-foreground tabular-nums">{{ p.confidence }}%</span>
               </div>
               <div class="bg-muted h-2 overflow-hidden rounded-full">
@@ -151,7 +151,7 @@ const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
 
           <section class="bg-primary/10 grid gap-1 rounded-md p-3 text-sm">
             <span class="text-muted-foreground text-xs">Suggested action</span>
-            <span class="font-medium">{{ PROFILES[client.profiles[0]!.id].offer }}</span>
+            <span class="font-medium">{{ profiles[client.profiles[0]!.id].offer }}</span>
           </section>
         </div>
       </template>

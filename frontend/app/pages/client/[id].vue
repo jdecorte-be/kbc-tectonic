@@ -6,10 +6,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartCrosshair, ChartTooltip, ChartTooltipContent, componentToString } from '@/components/ui/chart'
-import { PROFILES, getClient, relatedClients } from '@/data/mock'
 
 const route = useRoute()
-const client = getClient(String(route.params.id))
+const { data: clientData } = await useClient(String(route.params.id))
+const client = clientData.value
 if (!client) {
   throw createError({ statusCode: 404, statusMessage: 'Client not found', fatal: true })
 }
@@ -35,7 +35,10 @@ const tiles = [
   { label: 'Cash share', value: `${client.cashShare}%` }
 ]
 
-const related = relatedClients(client)
+const [allClients, relations, profiles] = await Promise.all([useClients(), useRelations(), useProfiles()])
+const related = (relations.value[client.id] ?? [])
+  .map(r => ({ ...r, client: allClients.value.find(c => c.id === r.clientId)! }))
+  .filter(r => r.client)
 
 const lastScanned = new Date(client.lastScanned).toLocaleString('en-BE', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
 
@@ -81,7 +84,7 @@ useSeoMeta({ title: client.name })
           :key="p.id"
           :variant="p === main ? 'default' : 'outline'"
         >
-          {{ PROFILES[p.id].label }} {{ p.confidence }}%
+          {{ profiles[p.id].label }} {{ p.confidence }}%
         </Badge>
       </div>
     </div>
@@ -167,11 +170,11 @@ useSeoMeta({ title: client.name })
       <Card>
         <CardHeader>
           <CardTitle>Suggested action</CardTitle>
-          <CardDescription>Based on main profile: {{ PROFILES[main.id].label }}</CardDescription>
+          <CardDescription>Based on main profile: {{ profiles[main.id].label }}</CardDescription>
         </CardHeader>
         <CardContent class="grid gap-3">
           <div class="bg-primary/10 rounded-md p-3 font-medium">
-            {{ PROFILES[main.id].offer }}
+            {{ profiles[main.id].offer }}
           </div>
           <div
             v-for="p in client.profiles.slice(1)"
@@ -181,7 +184,7 @@ useSeoMeta({ title: client.name })
             <div class="text-muted-foreground text-xs">
               Secondary · {{ p.confidence }}%
             </div>
-            {{ PROFILES[p.id].offer }}
+            {{ profiles[p.id].offer }}
           </div>
         </CardContent>
       </Card>
@@ -289,7 +292,7 @@ useSeoMeta({ title: client.name })
                 {{ r.kind === 'linked' ? 'Linked' : 'Similar' }}
               </Badge>
             </div>
-            <span class="text-muted-foreground text-xs">{{ PROFILES[r.client.profiles[0]!.id].label }} · {{ r.client.age }} y</span>
+            <span class="text-muted-foreground text-xs">{{ profiles[r.client.profiles[0]!.id].label }} · {{ r.client.age }} y</span>
             <span class="text-xs">{{ r.reason }}</span>
           </NuxtLink>
         </div>

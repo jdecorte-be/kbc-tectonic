@@ -1,4 +1,6 @@
 import sys
+import json
+from pathlib import Path
 import logging
 import random
 from datetime import datetime, timedelta, timezone
@@ -6,7 +8,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import SessionLocal, engine, Base
-from app.models import User, Transaction
+from app.models import User, Transaction, ClientRecord, DashboardMeta
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -347,6 +349,20 @@ def seed_database(db: Session, force: bool = False) -> dict:
         "transactions_created": total_transactions_created,
         "transactions_per_user": 100
     }
+
+def seed_demo_clients(db: Session, force: bool = False) -> dict:
+    """Load synthetic profiled clients + dashboard aggregates from demo_data.json."""
+    if db.query(ClientRecord).count() > 0 and not force:
+        return {"status": "skipped", "clients": db.query(ClientRecord).count()}
+    data = json.loads((Path(__file__).parent / "demo_data.json").read_text())
+    db.query(ClientRecord).delete()
+    db.query(DashboardMeta).filter(DashboardMeta.key != "jev").delete()
+    for c in data["clients"]:
+        db.add(ClientRecord(id=c["id"], payload=c))
+    for key in ("kpis", "segments", "habitTrends", "weekdayRhythm", "links"):
+        db.add(DashboardMeta(key=key, payload=data[key]))
+    db.commit()
+    return {"status": "success", "clients": len(data["clients"])}
 
 if __name__ == "__main__":
     force_seed = "--force" in sys.argv

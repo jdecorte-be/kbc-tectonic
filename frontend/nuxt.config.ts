@@ -25,8 +25,10 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
-  routeRules: {
-    '/': { prerender: true }
+  ssr: false, // data comes from the FastAPI backend in the browser
+
+  runtimeConfig: {
+    public: { apiBase: 'http://localhost:8000' } // override with NUXT_PUBLIC_API_BASE
   },
 
   compatibilityDate: '2026-06-30',

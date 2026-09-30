@@ -11,11 +11,14 @@ import {
   componentToString
 } from '@/components/ui/chart'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { HABITS, habitTrends } from '@/data/mock'
-import type { Habit, WeekPoint } from '@/data/mock'
+import { HABITS } from '@/types/api'
+import type { Habit, WeekPoint as ApiWeekPoint } from '@/types/api'
+
+type WeekPoint = Omit<ApiWeekPoint, 'date'> & { date: Date }
 
 const habit = ref<Habit>('Travel')
-const data = computed(() => habitTrends[habit.value])
+const dash = await useDashboard()
+const data = computed<WeekPoint[]>(() => (dash.value?.habitTrends[habit.value] ?? []).map(p => ({ ...p, date: new Date(p.date) })))
 
 const chartConfig = {
   spend: { label: 'Avg weekly spend (€)', color: 'var(--chart-1)' },

@@ -2,15 +2,16 @@
 import SegmentDistribution from '@/components/SegmentDistribution.vue'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { PROFILES, PROFILE_IDS, clients } from '@/data/mock'
+import { PROFILE_IDS } from '@/types/api'
 
 definePageMeta({ title: 'Profiles' })
 
-const cards = PROFILE_IDS.map(id => ({
-  id,
-  ...PROFILES[id],
-  members: clients.filter(c => c.profiles.some(p => p.id === id))
-}))
+const clients = await useClients()
+const profiles = await useProfiles()
+const cards = computed(() => PROFILE_IDS.map(id => ({
+  ...profiles.value[id],
+  members: clients.value.filter(c => c.profiles.some(p => p.id === id))
+})))
 </script>
 
 <template>
