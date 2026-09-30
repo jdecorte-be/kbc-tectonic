@@ -26,6 +26,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dnd-kit-vue": "^0.0.2",
+    "force-graph": "^1.52.0",
     "nuxt": "^4.5.2",
     "reka-ui": "^2.10.5",
     "shadcn-vue": "^2.8.2",

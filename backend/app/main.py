@@ -9,7 +9,7 @@ from app.database import SessionLocal
 
 from app.config import settings
 from app.database import engine, Base, get_db
-from app import models, schemas, crud, seed, jev, profiles
+from app import models, schemas, crud, seed, jev, profiles, profiling
 
 Base.metadata.create_all(bind=engine)
 
@@ -27,15 +27,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-with SessionLocal() as _db:
-    seed.seed_demo_clients(_db)
-
 def _meta(db: Session, key: str):
     row = db.get(models.DashboardMeta, key)
     return row.payload if row else None
 
 def _clients(db: Session) -> list[dict]:
-    return [r.payload for r in db.query(models.ClientRecord).order_by(models.ClientRecord.id).all()]
+    """Dashboard clients, profiled live from the seeded users and their transactions."""
+    return profiling.build_clients(crud.get_users(db, limit=10_000))
 
 @app.get("/api/profiles", response_model=List[schemas.ProfileDef], tags=["Clients"])
 def list_profiles():
@@ -48,10 +46,10 @@ def list_clients(db: Session = Depends(get_db)):
 
 @app.get("/api/clients/{client_id}", response_model=schemas.Client, tags=["Clients"])
 def get_client(client_id: str, db: Session = Depends(get_db)):
-    row = db.get(models.ClientRecord, client_id)
-    if not row:
+    client = next((c for c in _clients(db) if c["id"] == client_id), None)
+    if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    return row.payload
+    return client
 
 @app.get("/api/relations", response_model=Dict[str, List[schemas.Relation]], tags=["Clients"])
 def list_relations(limit: int = 4, db: Session = Depends(get_db)):
@@ -61,7 +59,8 @@ def list_relations(limit: int = 4, db: Session = Depends(get_db)):
 
 @app.get("/api/dashboard", response_model=schemas.Dashboard, tags=["Clients"])
 def dashboard(db: Session = Depends(get_db)):
-    return {k: _meta(db, k) for k in ("kpis", "segments", "habitTrends", "weekdayRhythm", "links", "jevUsage")}
+    users = crud.get_users(db, limit=10_000)
+    return {**profiling.build_dashboard(users, profiling.build_clients(users)), "jevUsage": _meta(db, "jevUsage")}
 
 @app.get("/api/health", response_model=schemas.HealthCheckResponse, tags=["Health"])
 def health_check(db: Session = Depends(get_db)):
@@ -79,7 +78,7 @@ def health_check(db: Session = Depends(get_db)):
 
 @app.post("/api/seed", tags=["Database"])
 def trigger_seed(force: bool = False, db: Session = Depends(get_db)):
-    return {**seed.seed_database(db, force=force), "demo": seed.seed_demo_clients(db, force=force)}
+    return seed.seed_database(db, force=force)
 
 @app.get("/api/users", response_model=List[schemas.UserResponse], tags=["Users"])
 def list_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -141,7 +140,9 @@ def jev_client_trackers(db: Session = Depends(get_db)):
 def jev_score_clients(db: Session = Depends(get_db)):
     """Run Jev over every dashboard client and cache the trackers."""
     clients = _clients(db)
-    payload = {"analyzedAt": datetime.now(timezone.utc).isoformat(), "clients": jev.analyze_clients(clients)}
+    results = jev.analyze_clients(clients)
+    jev.record_usage(db, results.values())
+    payload = {"analyzedAt": datetime.now(timezone.utc).isoformat(), "clients": results}
     db.merge(models.DashboardMeta(key="jev", payload=payload))
     db.commit()
     return payload

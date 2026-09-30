@@ -52,15 +52,8 @@ class Transaction(Base):
 
     user = relationship("User", back_populates="transactions")
 
-class ClientRecord(Base):
-    """Profiled client (habit/profile analysis result) stored as the JSON shape the dashboard consumes."""
-    __tablename__ = "client_records"
-
-    id = Column(String(20), primary_key=True)
-    payload = Column(JSON, nullable=False)
-
 class DashboardMeta(Base):
-    """Precomputed dashboard aggregates: kpis, segments, habitTrends, weekdayRhythm, links, jev."""
+    """Cached Jev results and usage (keys: jev, jevUsage)."""
     __tablename__ = "dashboard_meta"
 
     key = Column(String(50), primary_key=True)

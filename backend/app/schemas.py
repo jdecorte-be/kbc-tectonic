@@ -92,7 +92,7 @@ class HealthCheckResponse(BaseModel):
     database: str
     timestamp: datetime
 
-# --- Dashboard (profiled demo clients) ---
+# --- Dashboard (clients profiled from users + transactions) ---
 
 class ProfileId(str, Enum):
     student = "student"
@@ -120,6 +120,8 @@ class ProfileDef(BaseModel):
     label: str
     core: bool
     offer: str
+    description: str = ""
+    looksFor: List[str] = Field(default=[], description="Signals the rules look for")
 
 class ProfileScore(BaseModel):
     id: ProfileId
@@ -146,7 +148,8 @@ class Client(BaseModel):
     name: str
     age: int
     profiles: List[ProfileScore] = Field(description="Highest confidence first")
-    monthlySpend: List[float] = Field(description="Last 6 months")
+    monthlySpend: List[float] = Field(description="Spend per 30-day window, oldest first")
+    spendMonths: List[str] = Field(description="Label (window end date, e.g. '30 Sep') of each monthlySpend window")
     savingsRate: float
     recurringCount: int
     cashShare: float = Field(description="% of spend in cash")

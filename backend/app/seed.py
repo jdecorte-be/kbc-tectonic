@@ -1,6 +1,4 @@
 import sys
-import json
-from pathlib import Path
 import logging
 import random
 from datetime import datetime, timedelta, timezone
@@ -8,7 +6,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import SessionLocal, engine, Base
-from app.models import User, Transaction, ClientRecord, DashboardMeta
+from app.models import User, Transaction
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -125,6 +123,55 @@ SAMPLE_USERS = [
         "risk_tolerance": "low"
     }
 ]
+
+FIRST_NAMES = ["Louise", "Noah", "Liam", "Olivia", "Arthur", "Mila", "Jules", "Elise", "Victor", "Lena", "Finn",
+               "Fien", "Senne", "Axel", "Ella", "Mathis", "Jade", "Robbe", "Lore", "Tom", "An", "Pieter", "Sara",
+               "Koen", "Eva", "Wim", "Katrien", "Dries", "Lien", "Stijn", "Charlotte", "Maxime", "Camille", "Yasmine", "Omar"]
+LAST_NAMES = ["Maes", "Jacobs", "Mertens", "Willems", "Claes", "Goossens", "Wouters", "De Smet", "Lambert", "Martens",
+              "Vermeulen", "Hermans", "Pauwels", "Declercq", "Desmet", "Aerts", "Hendrickx", "Bogaert", "Leclercq",
+              "Michiels", "Verhoeven", "Segers", "Dupont", "Martin", "Peeters", "Janssens", "Dubois"]
+CITIES = [("Brussels", "Rue Neuve"), ("Antwerp", "Meir"), ("Ghent", "Korenmarkt"), ("Leuven", "Bondgenotenlaan"),
+          ("Liège", "Rue Pont d'Ile"), ("Bruges", "Steenstraat"), ("Charleroi", "Boulevard Tirou"), ("Namur", "Rue de Fer")]
+
+
+def generate_sample_users(count: int = 100) -> list:
+    """Synthetic clients cloned from the handcrafted SAMPLE_USERS archetypes with varied traits (deterministic)."""
+    rng = random.Random(2026)
+    templates = list(SAMPLE_USERS)
+    users, used = [], {u["email"] for u in templates}
+    while len(users) < count:
+        t = templates[len(users) % len(templates)]
+        first, last = rng.choice(FIRST_NAMES), rng.choice(LAST_NAMES)
+        email = f"{first}.{last}".lower().replace(" ", "") + "@example.com"
+        if email in used:
+            continue
+        used.add(email)
+        city, street = rng.choice(CITIES)
+        u = dict(t)
+        u.update(
+            name=f"{first} {last}",
+            email=email,
+            phone_number=f"+32 4{rng.randint(60, 99)} {rng.randint(10, 99)} {rng.randint(10, 99)} {rng.randint(10, 99)}",
+            address=f"{street} {rng.randint(1, 250)}",
+            city=city,
+            country="Belgium",
+        )
+        if rng.random() < 0.3:
+            u["discretionary_spender"] = rng.choice(["frugal", "moderate", "impulsive"])
+        if rng.random() < 0.3:
+            u["savings_goal"] = rng.choice(["real_estate", "emergency_fund", "travel", "retirement", "investment"])
+        if rng.random() < 0.3:
+            u["risk_tolerance"] = rng.choice(["low", "medium", "high"])
+        if not u["is_student"] and not u["is_unemployed"]:
+            u["main_transportation"] = rng.choice(["car", "public_transit", "bicycle", "car"])
+            u["children_count"] = rng.choice([0, 0, 1, 2, 3]) if u["age_range"] in ("26-35", "36-50") else u["children_count"]
+            u["in_couple"] = rng.random() < 0.5
+        users.append(u)
+    return users
+
+
+SAMPLE_USERS = SAMPLE_USERS + generate_sample_users(100)
+
 
 def generate_user_transactions(user_id: int, u: dict, target_count: int = 100) -> list:
     """Generate exactly `target_count` lifestyle-matched transactions for a user."""
@@ -269,6 +316,11 @@ def generate_user_transactions(user_id: int, u: dict, target_count: int = 100) -
         else:
             raw_txs.append((tx_date, Decimal("200.00"), "EUR", "transfer", "completed", "Emergency Savings Fund Deposit"))
 
+    # 8b. Upcoming trip for travel savers: flight + accommodation booked in the last two weeks
+    if u["savings_goal"] == "travel":
+        raw_txs.append((now - timedelta(days=6), Decimal("189.00"), "EUR", "payment", "completed", "Ryanair Flight Booking Brussels-Barcelona"))
+        raw_txs.append((now - timedelta(days=5), Decimal("264.00"), "EUR", "payment", "completed", "Airbnb Barcelona Apartment Booking"))
+
     # 9. Failed Transactions for Unemployed / Tight Financial Users
     if u["is_unemployed"] or u["financial_situation"] == "tight":
         fail_date1 = now - timedelta(days=45)
@@ -349,20 +401,6 @@ def seed_database(db: Session, force: bool = False) -> dict:
         "transactions_created": total_transactions_created,
         "transactions_per_user": 100
     }
-
-def seed_demo_clients(db: Session, force: bool = False) -> dict:
-    """Load synthetic profiled clients + dashboard aggregates from demo_data.json."""
-    if db.query(ClientRecord).count() > 0 and not force:
-        return {"status": "skipped", "clients": db.query(ClientRecord).count()}
-    data = json.loads((Path(__file__).parent / "demo_data.json").read_text())
-    db.query(ClientRecord).delete()
-    db.query(DashboardMeta).filter(DashboardMeta.key != "jev").delete()
-    for c in data["clients"]:
-        db.add(ClientRecord(id=c["id"], payload=c))
-    for key in ("kpis", "segments", "habitTrends", "weekdayRhythm", "links"):
-        db.add(DashboardMeta(key=key, payload=data[key]))
-    db.commit()
-    return {"status": "success", "clients": len(data["clients"])}
 
 if __name__ == "__main__":
     force_seed = "--force" in sys.argv

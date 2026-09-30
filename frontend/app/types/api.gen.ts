@@ -156,12 +156,14 @@ export interface paths {
         };
         /** Get User Detail */
         get: operations["get_user_detail_api_users__user_id__get"];
-        put?: never;
+        /** Update User */
+        put: operations["update_user_api_users__user_id__put"];
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update User */
+        patch: operations["update_user_api_users__user_id__patch"];
         trace?: never;
     };
     "/api/transactions": {
@@ -243,6 +245,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/openapi.md": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Openapi Markdown */
+        get: operations["get_openapi_markdown_api_openapi_md_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -262,9 +281,14 @@ export interface components {
             profiles: components["schemas"]["ProfileScore"][];
             /**
              * Monthlyspend
-             * @description Last 6 months
+             * @description Spend per 30-day window, oldest first
              */
             monthlySpend: number[];
+            /**
+             * Spendmonths
+             * @description Label (window end date, e.g. '30 Sep') of each monthlySpend window
+             */
+            spendMonths: string[];
             /** Savingsrate */
             savingsRate: number;
             /** Recurringcount */
@@ -426,6 +450,17 @@ export interface components {
             core: boolean;
             /** Offer */
             offer: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Looksfor
+             * @description Signals the rules look for
+             * @default []
+             */
+            looksFor: string[];
         };
         /**
          * ProfileId
@@ -799,6 +834,49 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
+        /** UserUpdate */
+        UserUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Phone Number */
+            phone_number?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Address */
+            address?: string | null;
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Financial Situation */
+            financial_situation?: string | null;
+            /** Is Student */
+            is_student?: boolean | null;
+            /** Is Unemployed */
+            is_unemployed?: boolean | null;
+            /** Is High Income */
+            is_high_income?: boolean | null;
+            /** Discretionary Spender */
+            discretionary_spender?: string | null;
+            /** Main Transportation */
+            main_transportation?: string | null;
+            /** Children Count */
+            children_count?: number | null;
+            /** In Couple */
+            in_couple?: boolean | null;
+            /** Has Insurance */
+            has_insurance?: boolean | null;
+            /** Housing Status */
+            housing_status?: string | null;
+            /** Age Range */
+            age_range?: string | null;
+            /** Savings Goal */
+            savings_goal?: string | null;
+            /** Risk Tolerance */
+            risk_tolerance?: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1107,6 +1185,76 @@ export interface operations {
             };
         };
     };
+    update_user_api_users__user_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_api_users__user_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_transactions_api_transactions_get: {
         parameters: {
             query?: {
@@ -1260,6 +1408,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JevTrackers"];
+                };
+            };
+        };
+    };
+    get_openapi_markdown_api_openapi_md_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
                 };
             };
         };

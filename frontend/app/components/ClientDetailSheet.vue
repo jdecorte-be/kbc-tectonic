@@ -10,7 +10,7 @@ const profiles = await useProfiles()
 
 const eur = (n: number) => `${n < 0 ? '-' : n > 0 ? '+' : ''}€${Math.abs(n).toLocaleString('en-BE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 const maxSpend = computed(() => Math.max(...(props.client?.monthlySpend ?? [1])))
-const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
+const months = computed(() => props.client?.spendMonths ?? [])
 </script>
 
 <template>

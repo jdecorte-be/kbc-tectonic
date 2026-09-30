@@ -61,7 +61,7 @@ const ago = computed(() => {
           Client graph
         </h1>
         <p class="text-muted-foreground text-sm">
-          Every client sorted into its strongest profile. The ring shows how sure the tracker is.
+          Live map of every client pulled towards its strongest profile. The ring shows how sure the tracker is; hover to trace connections.
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -151,14 +151,15 @@ const ago = computed(() => {
           v-model:selected="selectedId"
           :layout="layout"
           :filter="filter"
-          :height="560"
+          :height="600"
+          @toggle-profile="toggle"
         />
         <div class="text-muted-foreground flex flex-wrap gap-x-5 gap-y-1 border-t px-4 py-2.5 text-xs">
           <span class="flex items-center gap-1.5"><span class="bg-primary h-0.5 w-4 rounded" /> Linked (household, shared payments)</span>
-          <span
-            v-if="layout === 'sorted'"
-            class="flex items-center gap-1.5"
-          ><span class="border-muted-foreground w-4 border-t-2 border-dashed" /> Also tracked ≥ 50%</span>
+          <template v-if="layout === 'sorted'">
+            <span class="flex items-center gap-1.5"><span class="bg-muted-foreground size-3 rounded-full" /> Profile hub (closer = more confident)</span>
+            <span class="flex items-center gap-1.5"><span class="border-muted-foreground w-4 border-t-2 border-dashed" /> Also tracked ≥ 50%</span>
+          </template>
           <span
             v-else
             class="flex items-center gap-1.5"

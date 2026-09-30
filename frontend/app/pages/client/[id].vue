@@ -15,7 +15,7 @@ if (!client) {
 }
 definePageMeta({ title: 'Client' })
 
-const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
+const months = client.spendMonths
 const series = client.monthlySpend.map((spend, i) => ({ i, spend }))
 type Row = typeof series[number]
 
@@ -118,7 +118,7 @@ useSeoMeta({ title: client.name })
       <Card class="lg:col-span-2">
         <CardHeader>
           <CardTitle>Spending trend</CardTitle>
-          <CardDescription>Last 6 months</CardDescription>
+          <CardDescription>Per 30 days, last {{ months.length }} periods</CardDescription>
         </CardHeader>
         <CardContent>
           <ChartContainer

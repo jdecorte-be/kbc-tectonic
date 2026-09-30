@@ -121,7 +121,29 @@ def analyze_client(c: dict) -> dict:
         "trackers": [{"id": APP_PROFILE[p["profile"]], "confidence": p["confidence"]} for p in summary["profiles"]],
         "incomeRegularity": summary["income_regularity"],
         "model": data.get("model"),
+        "usage": data.get("usage"),
     }
+
+def _tokens(usage: dict, *keys: str) -> int:
+    return next((int(usage[k]) for k in keys if isinstance(usage.get(k), (int, float))), 0)
+
+def record_usage(db, results) -> dict:
+    """Add the token usage of successful Jev calls to the running total shown on the dashboard."""
+    from app.models import DashboardMeta
+    row = db.get(DashboardMeta, "jevUsage")
+    total = dict(row.payload) if row else {"requests": 0, "clientsAnalysed": 0, "inputTokens": 0, "outputTokens": 0, "costUsd": 0.0}
+    for r in results:
+        if r.get("error"):
+            continue
+        usage = r.get("usage") or {}
+        total["requests"] += 1
+        total["clientsAnalysed"] += 1
+        total["inputTokens"] += _tokens(usage, "input_tokens", "prompt_tokens", "inputTokens")
+        total["outputTokens"] += _tokens(usage, "output_tokens", "completion_tokens", "outputTokens")
+    total["costUsd"] = round(total["inputTokens"] / 1_000_000 * settings.JEV_PRICE_PER_M_INPUT, 6)
+    db.merge(DashboardMeta(key="jevUsage", payload=total))
+    db.commit()
+    return total
 
 def analyze_clients(clients: list[dict]) -> dict:
     def one(c):
