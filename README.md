@@ -1,44 +1,45 @@
-# Docker Full-Stack Architecture (PostgreSQL + FastAPI + React Vite)
+# Full-Stack Docker Architecture (PostgreSQL + FastAPI + Nuxt 4)
 
-A complete, production-ready containerized full-stack Todo application built with **PostgreSQL 16**, **FastAPI (Python 3.11)**, and **React 18 + Vite (TypeScript)**, fully orchestrated with **Docker Compose** and managed via a comprehensive **Makefile**.
+A complete, production-ready containerized architecture featuring **PostgreSQL 16**, **FastAPI (Python 3.11)**, **Nuxt 4 / Vue 3 (pnpm)**, an **Adminer Database Web Manager**, and a **Makefile** for seamless developer workflows.
 
 ---
 
 ## 🚀 Architecture Overview
 
 ```
-                          ┌──────────────────────────┐
-                          │   Browser / Client UI    │
-                          │   http://localhost:5173  │
-                          └─────────────┬────────────┘
-                                        │
-                                        │ Proxy /api
-                                        ▼
+                                  ┌──────────────────────────┐
+                                  │   Browser / Client UI    │
+                                  │   http://localhost:3000  │
+                                  └─────────────┬────────────┘
+                                                │
+                                                │ API / Custom
+                                                ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ Docker Network: app-network                                               │
 │                                                                          │
 │  ┌───────────────────────┐                  ┌─────────────────────────┐  │
 │  │   frontend            │                  │   backend               │  │
-│  │   (Node 20 + Vite)    │                  │   (FastAPI + Uvicorn)   │  │
-│  │   Port 5173           │                  │   Port 8000             │  │
+│  │   (Node 20 + Nuxt 4)  │                  │   (FastAPI + Uvicorn)   │  │
+│  │   Port 3000           │                  │   Port 8000             │  │
 │  └───────────────────────┘                  └────────────┬────────────┘  │
 │                                                          │               │
-│                                                          │ SQLAlchemy    │
-│                                                          ▼               │
-│                                             ┌─────────────────────────┐  │
-│                                             │   db                    │  │
-│                                             │   (PostgreSQL 16)       │  │
-│                                             │   Port 5432             │  │
-│                                             └─────────────────────────┘  │
+│  ┌───────────────────────┐                               │ SQLAlchemy    │
+│  │   adminer (DB UI)     │                               ▼               │
+│  │   http://localhost:8080├───────────────────► ┌─────────────────────────┐  │
+│  │   (Inspect DB)        │                    │   db                    │  │
+│  └───────────────────────┘                    │   (PostgreSQL 16)       │  │
+│                                               │   Port 5433 (Host)      │  │
+│                                               └─────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Components
 
-- **Database (`db`)**: PostgreSQL 16 Alpine with custom health checks and persistent volume storage (`postgres_data`).
-- **Backend (`backend`)**: FastAPI application with SQLAlchemy ORM, Pydantic schemas, auto-migrations on start, health status check, interactive Swagger docs (`http://localhost:8000/api/docs`), and live code reloading in container.
-- **Frontend (`frontend`)**: React 18 + Vite + TypeScript application with hot module replacement (HMR), real-time system status indicators, and full CRUD Todo interface.
-- **Makefile**: Unified command interface for single-command setup, execution, logging, status monitoring, and shell access.
+- **Database (`db`)**: PostgreSQL 16 Alpine with `pg_isready` health checks and persistent volume (`postgres_data`).
+- **Database Web Management (`adminer`)**: Adminer web GUI on [http://localhost:8080](http://localhost:8080) for inspecting and querying PostgreSQL by hand.
+- **Backend (`backend`)**: FastAPI application with SQLAlchemy ORM, Pydantic validation, health status check, interactive Swagger docs ([http://localhost:8000/api/docs](http://localhost:8000/api/docs)), live reloading, and database seed script (`app.seed`).
+- **Frontend (`frontend`)**: Nuxt 4 / Vue 3 / `@nuxt/ui` / Tailwind CSS / pnpm application running on port `3000`.
+- **Makefile**: Unified command interface for setup, startup, database seeding, status inspection, logging, and shell access.
 
 ---
 
@@ -48,20 +49,22 @@ A complete, production-ready containerized full-stack Todo application built wit
 - [Docker](https://docs.docker.com/get-docker/) & [Docker Compose v2+](https://docs.docker.com/compose/)
 - `make` (GNU Make)
 
-### 1. Start the entire application stack
+### 1. Start the Stack
 ```bash
 make up
 ```
-*This command automatically sets up `.env` from `.env.example` if needed, builds container images, and starts all services in the background.*
 
-### 2. View Service Status
+### 2. Seed the Database
 ```bash
-make status
+make seed
 ```
+*Seeds PostgreSQL with sample Users (names, phone numbers, emails, addresses) and Transactions (deposits, payments, withdrawals, transfers).*
 
-### 3. Open in Browser
-- **Frontend Application**: [http://localhost:5173](http://localhost:5173)
-- **FastAPI OpenAPI Swagger Documentation**: [http://localhost:8000/api/docs](http://localhost:8000/api/docs)
+### 3. Access Services
+- **Nuxt 4 Frontend**: [http://localhost:3000](http://localhost:3000)
+- **Adminer DB Inspection UI**: [http://localhost:8080](http://localhost:8080)
+  - *Login*: Server: `db`, Username: `postgres`, Password: `postgres`, Database: `tododb`
+- **FastAPI OpenAPI Docs**: [http://localhost:8000/api/docs](http://localhost:8000/api/docs)
 - **Backend Health Check**: [http://localhost:8000/api/health](http://localhost:8000/api/health)
 
 ---
@@ -73,58 +76,34 @@ Run `make` or `make help` to view all available commands:
 | Command | Description |
 | :--- | :--- |
 | `make up` (or `make start`) | Start all services in background (with healthchecks) |
+| `make seed` | Populate database with sample Users and Transactions |
 | `make build` | Rebuild Docker container images |
 | `make down` (or `make stop`) | Stop running services |
 | `make restart` | Restart all containers |
 | `make status` (or `make ps`) | View health and status of containers |
 | `make logs` | Tail logs for all services |
 | `make logs-backend` | Tail logs for FastAPI backend |
-| `make logs-frontend` | Tail logs for React/Vite frontend |
+| `make logs-frontend` | Tail logs for Nuxt 4 frontend |
 | `make logs-db` | Tail logs for PostgreSQL database |
-| `make shell-backend` | Open an interactive bash shell in the backend container |
-| `make shell-frontend` | Open an interactive shell in the frontend container |
-| `make shell-db` | Open interactive `psql` shell in the database container |
+| `make logs-adminer` | Tail logs for Adminer database web UI |
+| `make shell-backend` | Open an interactive bash shell in backend container |
+| `make shell-frontend` | Open an interactive shell in frontend container |
+| `make shell-db` | Open interactive `psql` shell in database container |
 | `make clean` | Stop stack and purge persistent volumes and network orphans |
-
----
-
-## ⚙️ Environment Variables (`.env`)
-
-```env
-# PostgreSQL Configuration
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=tododb
-POSTGRES_PORT=5432
-POSTGRES_HOST=db
-
-# Backend Configuration
-DATABASE_URL=postgresql://postgres:postgres@db:5432/tododb
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173
-
-# Frontend Configuration
-VITE_API_BASE_URL=http://localhost:8000
-```
 
 ---
 
 ## 📡 REST API Endpoints
 
-### Health & Connectivity
-- `GET /api/health` - Check API and PostgreSQL database health
+### Database & Health
+- `GET /api/health` - Check API and PostgreSQL database status
+- `POST /api/seed` - Trigger database seeding (`?force=true` to reset)
 
-### Todo Resource (`/api/todos`)
-- `GET /api/todos` - List all todos (optional `?completed=true|false` filter)
-- `POST /api/todos` - Create a new todo (`{"title": "Task", "description": "Details"}`)
-- `GET /api/todos/{id}` - Fetch a specific todo by ID
-- `PUT /api/todos/{id}` - Update todo title, description, or completion status
-- `DELETE /api/todos/{id}` - Delete todo task
+### Users (`/api/users`)
+- `GET /api/users` - List all users
+- `GET /api/users/{user_id}` - Get user details with transaction history
+- `POST /api/users` - Create a new user (`name`, `phone_number`, `email`, `address`, `city`, `country`)
 
----
-
-## 🧹 Teardown
-
-To stop and completely remove container volumes (resetting database state):
-```bash
-make clean
-```
+### Transactions (`/api/transactions`)
+- `GET /api/transactions` - List all transactions (optional `?user_id=1` filter)
+- `POST /api/transactions` - Create a transaction (`user_id`, `amount`, `currency`, `transaction_type`, `status`, `description`)
