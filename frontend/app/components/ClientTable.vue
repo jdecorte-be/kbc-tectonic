@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { IconTrendingDown, IconTrendingUp } from '@tabler/icons-vue'
+import { IconSearch, IconTrendingDown, IconTrendingUp, IconX } from '@tabler/icons-vue'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -11,14 +12,80 @@ import type { Client } from '@/data/mock'
 const emit = defineEmits<{ select: [client: Client] }>()
 
 const query = ref('')
-const profile = ref('all')
+
+interface FilterDef {
+  key: string
+  label: string
+  all: string
+  options: { value: string, label: string }[]
+}
+
+const filters: FilterDef[] = [
+  { key: 'profile', label: 'Profile', all: 'All profiles', options: PROFILE_IDS.map(id => ({ value: id, label: PROFILES[id].label })) },
+  { key: 'habit', label: 'Top habit', all: 'All habits', options: [...new Set(clients.map(c => c.topHabit))].sort().map(h => ({ value: h, label: h })) },
+  {
+    key: 'change',
+    label: 'Habit change',
+    all: 'Any change',
+    options: [
+      { value: 'stable', label: 'Stable (no change)' },
+      { value: 'info', label: 'Info' },
+      { value: 'watch', label: 'Watch' },
+      { value: 'alert', label: 'Alert' }
+    ]
+  },
+  {
+    key: 'age',
+    label: 'Age',
+    all: 'Any age',
+    options: [
+      { value: '0-25', label: 'Under 26' },
+      { value: '26-40', label: '26–40' },
+      { value: '41-60', label: '41–60' },
+      { value: '61-200', label: '61+' }
+    ]
+  },
+  {
+    key: 'spend',
+    label: 'Spend trend',
+    all: 'Any trend',
+    options: [{ value: 'up', label: 'Spending up' }, { value: 'down', label: 'Spending down' }]
+  },
+  {
+    key: 'confidence',
+    label: 'Confidence',
+    all: 'Any confidence',
+    options: [{ value: '60', label: '≥ 60%' }, { value: '75', label: '≥ 75%' }, { value: '90', label: '≥ 90%' }]
+  }
+]
+
+const values = reactive<Record<string, string>>(Object.fromEntries(filters.map(f => [f.key, 'all'])))
+
+const labelOf = (f: FilterDef) => f.options.find(o => o.value === values[f.key])?.label
+const activeChips = computed(() => filters.filter(f => values[f.key] !== 'all'))
+const activeFilters = computed(() => activeChips.value.length + (query.value ? 1 : 0))
+
+const reset = () => {
+  query.value = ''
+  for (const f of filters) values[f.key] = 'all'
+}
 
 const rows = computed(() =>
-  clients.filter(c =>
-    c.name.toLowerCase().includes(query.value.toLowerCase())
-    && (profile.value === 'all' || c.profiles.some(p => p.id === profile.value))))
+  clients.filter((c) => {
+    if (!c.name.toLowerCase().includes(query.value.toLowerCase())) return false
+    if (values.profile !== 'all' && !c.profiles.some(p => p.id === values.profile)) return false
+    if (values.habit !== 'all' && c.topHabit !== values.habit) return false
+    if (values.change !== 'all' && (c.change?.severity ?? 'stable') !== values.change) return false
+    if (values.age !== 'all') {
+      const [lo, hi] = values.age!.split('-').map(Number) as [number, number]
+      if (c.age < lo || c.age > hi) return false
+    }
+    if (values.spend !== 'all' && (trend(c) >= 0 ? 'up' : 'down') !== values.spend) return false
+    if (values.confidence !== 'all' && primaryProfile(c).confidence < Number(values.confidence)) return false
+    return true
+  }))
 
-const trend = (c: Client) => {
+function trend(c: Client) {
   const s = c.monthlySpend
   return Math.round(((s[s.length - 1]! - s[0]!) / s[0]!) * 100)
 }
@@ -31,32 +98,80 @@ const trend = (c: Client) => {
         <CardTitle>Clients</CardTitle>
         <CardDescription>Click a client to see why they got a profile and what to offer</CardDescription>
       </div>
-      <div class="flex gap-2">
-        <Input
-          v-model="query"
-          placeholder="Search client…"
-          class="w-44"
-        />
-        <Select v-model="profile">
-          <SelectTrigger class="w-44">
-            <SelectValue placeholder="All profiles" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              All profiles
-            </SelectItem>
-            <SelectItem
-              v-for="id in PROFILE_IDS"
-              :key="id"
-              :value="id"
-            >
-              {{ PROFILES[id].label }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
+      <div class="text-muted-foreground text-sm tabular-nums sm:ml-auto">
+        {{ rows.length }} of {{ clients.length }} clients
       </div>
     </CardHeader>
-    <CardContent>
+    <div class="flex flex-col gap-3 px-6">
+      <div class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+        <div class="col-span-2 flex flex-col gap-1.5 md:col-span-4 xl:col-span-1">
+          <span class="text-muted-foreground text-xs font-medium">Search</span>
+          <div class="relative">
+            <IconSearch class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+            <Input
+              v-model="query"
+              placeholder="Client name…"
+              class="pl-8"
+            />
+          </div>
+        </div>
+        <div
+          v-for="f in filters"
+          :key="f.key"
+          class="flex flex-col gap-1.5"
+        >
+          <span class="text-muted-foreground text-xs font-medium">{{ f.label }}</span>
+          <Select v-model="values[f.key]">
+            <SelectTrigger class="w-full">
+              <SelectValue :placeholder="f.all" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">
+                {{ f.all }}
+              </SelectItem>
+              <SelectItem
+                v-for="o in f.options"
+                :key="o.value"
+                :value="o.value"
+              >
+                {{ o.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div
+        v-if="activeFilters"
+        class="flex flex-wrap items-center gap-2"
+      >
+        <Badge
+          v-if="query"
+          variant="secondary"
+          class="cursor-pointer gap-1"
+          @click="query = ''"
+        >
+          “{{ query }}” <IconX class="size-3" />
+        </Badge>
+        <Badge
+          v-for="f in activeChips"
+          :key="f.key"
+          variant="secondary"
+          class="cursor-pointer gap-1"
+          @click="values[f.key] = 'all'"
+        >
+          {{ f.label }}: {{ labelOf(f) }} <IconX class="size-3" />
+        </Badge>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="h-6 px-2 text-xs"
+          @click="reset"
+        >
+          Clear all
+        </Button>
+      </div>
+    </div>
+    <CardContent class="pt-2">
       <Table>
         <TableHeader>
           <TableRow>

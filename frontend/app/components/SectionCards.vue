@@ -15,7 +15,7 @@ import { kpis } from '@/data/mock'
 const fmt = (n: number) => n.toLocaleString('en-BE')
 
 const cards = [
-  { label: 'Clients tracked', value: fmt(kpis.clientsTracked), badge: '+2.4%', icon: IconUsers, title: 'Transactions analysed daily', hint: 'Synthetic demo data' },
+  { label: 'Clients tracked', value: fmt(kpis.clientsTracked), badge: '+2.4%', icon: IconUsers, title: 'Transactions analysed daily', hint: 'Across all monitored accounts' },
   { label: 'Profiles detected', value: String(kpis.profilesDetected), badge: '4 core', icon: IconTags, title: 'Student to retiree', hint: 'Each client can hold several profiles' },
   { label: 'Habit changes this week', value: fmt(kpis.habitChanges), badge: 'vs. own baseline', icon: IconAlertTriangle, title: 'Drift detected per client', hint: 'Travel, overdraft and investing lead' },
   { label: 'Open opportunities', value: fmt(kpis.openOpportunities), badge: 'To action', icon: IconBulb, title: 'Offers triggered by a habit change', hint: 'e.g. travel insurance, ETF plan' }
