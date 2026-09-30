@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const clientSchema = z.object({
-  id: z.string(), name: z.string(), age: z.number(), city: z.string(), country: z.string(),
+  id: z.string(), name: z.string(), age: z.number().nullable(), city: z.string(), country: z.string(),
   balance: z.number(), transaction_count: z.number(), personalization_allowed: z.boolean()
 })
 export const clientListSchema = z.object({ items: z.array(clientSchema), total: z.number() })
@@ -22,6 +22,7 @@ export const providerMetricsSchema = z.record(z.string(), z.object({ api_calls: 
 export const registrySnapshotSchema = z.object({ count: z.number(), labels: z.array(z.string()) })
 export const categorySchema = z.object({ id: z.string(), label: z.string(), source: z.enum(['jev', 'openai', 'unknown']), confidence: z.number(), evidence: z.array(z.string()), created: z.boolean() })
 export const analysisSchema = z.object({
+  analysis_id: z.string().optional(), created_at: z.string().optional(),
   client: clientSchema,
   status: z.enum(['recommended', 'insufficient_information', 'no_match', 'opt_out', 'error']),
   summary: z.string(),
@@ -47,6 +48,20 @@ export const benchmarkSchema = z.object({
     recommended_count: z.number(), abstained_count: z.number(), opt_out_count: z.number(), error_count: z.number(), usage_source: usageSourceSchema
   }), error: z.string().nullable().optional()
 })
+export const analysisHistorySchema = z.object({
+  items: z.array(z.object({
+    id: z.string(), client_id: z.string(), status: analysisSchema.shape.status, created_at: z.string(),
+    duration_ms: z.number(), estimated_cost_usd: z.number()
+  })),
+  total: z.number()
+})
+export const benchmarkHistorySchema = z.object({
+  items: z.array(z.object({
+    id: z.string(), status: benchmarkSchema.shape.status, requested_count: z.number(), completed_count: z.number(),
+    elapsed_ms: z.number(), metrics: z.object({ estimated_cost_usd: z.number() }), created_at: z.string()
+  })),
+  total: z.number()
+})
 export type ClientSummary = z.infer<typeof clientSchema>
 export type ClientDetail = z.infer<typeof clientDetailSchema>
 export type Analysis = z.infer<typeof analysisSchema>
@@ -60,6 +75,7 @@ export const dollars = (value: number) => new Intl.NumberFormat('en-BE', { style
 export const number = (value: number) => new Intl.NumberFormat('en-BE', { maximumFractionDigits: 2 }).format(value)
 export const duration = (ms: number) => ms >= 60000 ? `${Math.floor(ms / 60000)} min ${Math.floor((ms % 60000) / 1000)} s` : `${number(ms / 1000)} s`
 export const confidence = (value: number) => `${Math.round(value * 100)}%`
+export const ageLabel = (value: number | null) => value === null ? 'Age unknown' : `${value} years`
 export function errorMessage(error: unknown): string {
   if (error instanceof z.ZodError) return 'The server response is incomplete or incompatible. Check the backend version.'
   if (error && typeof error === 'object' && 'data' in error) {

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { PROFILES, PROFILE_IDS, clients, primaryProfile } from '@/data/mock'
 import type { Client } from '@/data/mock'
+import { ageLabel } from '@/lib/api'
 
 const emit = defineEmits<{ select: [client: Client] }>()
 
@@ -84,7 +85,7 @@ const trend = (c: Client) => {
             <TableCell class="font-medium">
               {{ c.name }}
               <div class="text-muted-foreground text-xs">
-                {{ c.age }} y
+                {{ ageLabel(c.age) }}
               </div>
             </TableCell>
             <TableCell>

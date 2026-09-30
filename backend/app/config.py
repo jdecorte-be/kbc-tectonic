@@ -1,15 +1,19 @@
-import os
 from pathlib import Path
 from dotenv import load_dotenv
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT / ".env")
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "KBC Signal — Jev customer intelligence"
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/tododb")
-    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173")
+    PROJECT_NAME: str = "KBC Tectonic — Customer intelligence"
+    DATABASE_URL: str = f"sqlite:///{ROOT / 'data' / 'bank.sqlite3'}"
+    BANK_DATA_PATH: str = ""
+    PRODUCTS_PATH: str = ""
+    CATEGORY_DB_PATH: str = ""
+    GENERATED_CLIENT_COUNT: int = Field(default=1000, ge=1, le=10000)
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     @property
     def cors_origins_list(self) -> list[str]:

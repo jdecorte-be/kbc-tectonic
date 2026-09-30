@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { IconArrowRight, IconFingerprint, IconLoader2, IconRefresh, IconSparkles } from '@tabler/icons-vue'
+import { IconArrowRight, IconTags, IconLoader2, IconRefresh, IconSparkles } from '@tabler/icons-vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { errorMessage, number } from '@/lib/api'
 
 definePageMeta({ title: 'Category registry' })
@@ -25,96 +27,175 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
-    <div class="flex flex-wrap items-end justify-between gap-3">
+  <div class="flex flex-col gap-4 md:gap-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <p class="text-primary mb-2 text-[10px] font-semibold tracking-[0.2em] uppercase">
-          A vocabulary that grows with the evidence
-        </p><h1 class="text-3xl font-semibold tracking-tight">
+        <h2 class="text-2xl font-semibold">
           Category registry
-        </h1><p class="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
-          Jev selects a known category or returns Unknown. OpenAI can then infer a new category, save it and make it available to future analyses.
+        </h2>
+        <p class="text-muted-foreground text-sm">
+          Categories available to Jev and learned from OpenAI discovery.
         </p>
-      </div><Button
+      </div>
+      <Button
         variant="outline"
         size="sm"
         :disabled="loading"
         @click="load"
       >
-        <IconRefresh
-          class="size-3.5"
-          :class="loading ? 'animate-spin' : ''"
-        /> Refresh registry
+        <IconRefresh :class="loading && 'animate-spin'" /> Refresh registry
       </Button>
     </div>
-    <div class="bg-card flex flex-wrap items-center gap-3 rounded-xl border p-5 text-xs">
-      <span class="bg-primary/10 text-primary rounded-lg px-3 py-2 font-medium">Jev classification</span><IconArrowRight class="text-muted-foreground size-4" /><span class="bg-muted rounded-lg px-3 py-2">Unknown category</span><IconArrowRight class="text-muted-foreground size-4" /><span class="bg-primary/10 text-primary rounded-lg px-3 py-2 font-medium">OpenAI discovery</span><IconArrowRight class="text-muted-foreground size-4" /><span class="bg-muted rounded-lg px-3 py-2">Saved for the next client</span>
-    </div>
-    <div
+    <p
       v-if="error"
       role="alert"
-      class="text-destructive rounded-xl border p-5 text-sm"
+      class="text-destructive rounded-xl border p-4 text-sm"
     >
       {{ error }}
-    </div>
+    </p>
     <div
       v-if="loading && !registry"
-      class="text-muted-foreground flex items-center justify-center gap-2 p-12 text-sm"
+      class="text-muted-foreground flex items-center justify-center gap-2 py-12 text-sm"
     >
       <IconLoader2 class="size-4 animate-spin" /> Loading category registry…
     </div>
     <template v-if="registry">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <h2 class="font-semibold">
-          {{ number(registry.items.length) }} available categories
-        </h2><Badge
-          variant="outline"
-          class="gap-1.5"
-        >
-          <IconSparkles class="text-primary size-3.5" /> {{ discovered }} discovered by OpenAI
-        </Badge>
+      <div class="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs sm:grid-cols-2">
+        <Card class="@container/card">
+          <CardHeader>
+            <CardDescription>Available categories</CardDescription>
+            <CardTitle class="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              {{ number(registry.items.length) }}
+            </CardTitle>
+            <CardAction>
+              <Badge variant="outline">
+                <IconTags /> Registry
+              </Badge>
+            </CardAction>
+          </CardHeader>
+          <CardFooter class="flex-col items-start gap-1.5 text-sm">
+            <div class="font-medium">
+              Shared across client analyses
+            </div>
+            <div class="text-muted-foreground">
+              Jev selects from the latest saved categories
+            </div>
+          </CardFooter>
+        </Card>
+        <Card class="@container/card">
+          <CardHeader>
+            <CardDescription>Discovered by OpenAI</CardDescription>
+            <CardTitle class="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              {{ number(discovered) }}
+            </CardTitle>
+            <CardAction>
+              <Badge variant="outline">
+                <IconSparkles /> Learned
+              </Badge>
+            </CardAction>
+          </CardHeader>
+          <CardFooter class="flex-col items-start gap-1.5 text-sm">
+            <div class="font-medium">
+              Discovery after an Unknown response
+            </div>
+            <div class="text-muted-foreground">
+              New categories become options for the next client
+            </div>
+          </CardFooter>
+        </Card>
       </div>
-      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <article
-          v-for="category in registry.items"
-          :key="category.id"
-          class="bg-card rounded-xl border p-5"
-        >
-          <div class="mb-4 flex items-center justify-between gap-2">
-            <IconFingerprint class="text-primary size-5" /><Badge
-              :variant="category.source === 'openai' ? 'default' : 'secondary'"
-              class="text-[9px]"
-            >
-              {{ category.source === 'openai' ? 'Learned by OpenAI' : 'Initial category' }}
-            </Badge>
-          </div><h3 class="mb-2 font-semibold">
-            {{ category.label }}
-          </h3><p class="text-muted-foreground min-h-12 text-xs leading-relaxed">
-            {{ category.description }}
-          </p><div class="text-muted-foreground mt-5 flex items-center justify-between border-t pt-3 text-[10px]">
-            <span>{{ number(category.client_count) }} assigned clients</span><span>{{ new Date(category.created_at).toLocaleDateString('en-BE') }}</span>
-          </div>
-        </article>
-      </div>
-      <details
-        v-if="registry.questions.length"
-        class="bg-card rounded-xl border p-5"
-      >
-        <summary class="cursor-pointer text-sm font-medium">
-          Classification instructions
-        </summary><div class="mt-4 space-y-4">
-          <div
+      <Card>
+        <CardHeader>
+          <CardTitle>Classification workflow</CardTitle>
+          <CardDescription>When evidence is insufficient, the result can remain Unknown.</CardDescription>
+        </CardHeader>
+        <CardContent class="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">
+            Jev classification
+          </Badge><IconArrowRight class="text-muted-foreground size-4" />
+          <Badge variant="outline">
+            Unknown
+          </Badge><IconArrowRight class="text-muted-foreground size-4" />
+          <Badge variant="outline">
+            OpenAI discovery
+          </Badge><IconArrowRight class="text-muted-foreground size-4" />
+          <Badge variant="outline">
+            Saved for future analyses
+          </Badge>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Categories</CardTitle>
+          <CardDescription>Definitions, source and the number of assigned clients.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Category</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead class="text-right">
+                  Clients
+                </TableHead>
+                <TableHead>Created</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="category in registry.items"
+                :key="category.id"
+              >
+                <TableCell class="font-medium">
+                  {{ category.label }}
+                </TableCell>
+                <TableCell class="text-muted-foreground min-w-60 whitespace-normal">
+                  {{ category.description }}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">
+                    <IconSparkles v-if="category.source === 'openai'" />
+                    {{ category.source === 'openai' ? 'OpenAI' : 'Initial category' }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right tabular-nums">
+                  {{ number(category.client_count) }}
+                </TableCell>
+                <TableCell class="text-muted-foreground">
+                  {{ new Date(category.created_at).toLocaleDateString('en-BE') }}
+                </TableCell>
+              </TableRow>
+              <TableEmpty
+                v-if="!registry.items.length"
+                :colspan="5"
+              >
+                No categories are available yet.
+              </TableEmpty>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+      <Card v-if="registry.questions.length">
+        <CardHeader>
+          <CardTitle>Classification instructions</CardTitle>
+          <CardDescription>Saved questions used to classify clients.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <details
             v-for="question in registry.questions"
             :key="question.id"
+            class="border-b py-3 first:pt-0 last:border-0 last:pb-0"
           >
-            <p class="text-primary mb-2 font-mono text-[10px]">
+            <summary class="cursor-pointer text-sm font-medium">
               {{ question.id }}
-            </p><p class="text-muted-foreground text-xs leading-relaxed whitespace-pre-line">
+            </summary>
+            <p class="text-muted-foreground mt-3 text-sm whitespace-pre-line">
               {{ question.instructions }}
             </p>
-          </div>
-        </div>
-      </details>
+          </details>
+        </CardContent>
+      </Card>
     </template>
   </div>
 </template>

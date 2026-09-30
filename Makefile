@@ -1,5 +1,6 @@
-.PHONY: help setup install up build down logs status backend frontend test check
+.PHONY: help setup install up build down logs status backend frontend seed seed-local test check
 .DEFAULT_GOAL := help
+COUNT ?= 1000
 export PATH := $(CURDIR)/.tools/node/bin:$(CURDIR)/.tools/pnpm/node_modules/.bin:$(PATH)
 
 help: ## KBC + Jev demo commands
@@ -33,6 +34,16 @@ backend: ## Start FastAPI on localhost:8000
 
 frontend: ## Start Nuxt on localhost:3000 (another terminal)
 	cd frontend && pnpm dev --host 127.0.0.1 --port 3000
+
+seed: ## Seed synthetic clients; use running Docker backend or local Python (COUNT=1000)
+	@if command -v docker >/dev/null 2>&1 && docker compose ps --status running --services 2>/dev/null | grep -qx backend; then \
+		docker compose exec -T backend python -m app.seed --count "$(COUNT)"; \
+	else \
+		PYTHONPATH=backend .venv/bin/python -m app.seed --count "$(COUNT)"; \
+	fi
+
+seed-local: ## Seed through local Python and configured DATABASE_URL (COUNT=1000)
+	PYTHONPATH=backend .venv/bin/python -m app.seed --count "$(COUNT)"
 
 test: ## Test the workflow and adapters without paid API calls
 	PYTHONPATH=backend .venv/bin/python -m unittest discover -s backend/tests -v

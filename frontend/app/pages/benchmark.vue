@@ -2,6 +2,9 @@
 import { IconArrowRight, IconBolt, IconClock, IconCurrencyDollar, IconDownload, IconLoader2, IconPlayerPlay, IconPlayerStop, IconUsers } from '@tabler/icons-vue'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { dollars, duration, errorMessage, number, statusLabels, type Analysis, type Benchmark } from '@/lib/api'
 
@@ -12,6 +15,9 @@ const concurrency = ref(5)
 const job = useState<Benchmark | null>('benchmark-job', () => null)
 const starting = ref(false)
 const cancelling = ref(false)
+const savedLoading = ref(false)
+const historyError = ref('')
+const historyRefresh = ref(0)
 const error = ref('')
 const selectedResult = ref<Analysis | null>(null)
 const sheetOpen = ref(false)
@@ -20,6 +26,7 @@ const page = ref(0)
 const health = ref<Awaited<ReturnType<typeof api.health>> | null>(null)
 let pollTimer: ReturnType<typeof setTimeout> | undefined
 let mounted = false
+let jobRequest = 0
 const running = computed(() => job.value?.status === 'running')
 const progress = computed(() => job.value ? Math.min(100, job.value.completed_count / job.value.requested_count * 100) : 0)
 const filteredResults = computed(() => (job.value?.results ?? []).filter(result => filter.value === 'all' || (filter.value === 'abstained' ? ['insufficient_information', 'no_match'].includes(result.status) : result.status === filter.value)))
@@ -35,6 +42,10 @@ const outcomes = computed(() => job.value
 watch(filter, () => {
   page.value = 0
 })
+watch(() => [job.value?.id, job.value?.status], ([id, status], [previousId, previousStatus]) => {
+  if (id && status !== 'running' && (id !== previousId || status !== previousStatus))
+    ++historyRefresh.value
+})
 function schedulePoll() {
   clearTimeout(pollTimer)
   if (mounted && running.value)
@@ -43,44 +54,97 @@ function schedulePoll() {
 async function poll() {
   if (!job.value)
     return
+  const id = job.value.id
+  const request = ++jobRequest
   try {
-    job.value = await api.benchmark(job.value.id)
-    error.value = ''
+    const result = await api.benchmark(id)
+    if (request === jobRequest && mounted && job.value?.id === id) {
+      job.value = result
+      error.value = ''
+    }
   } catch (cause) {
-    error.value = `Could not refresh the run: ${errorMessage(cause)}`
+    if (request === jobRequest && mounted)
+      error.value = `Could not refresh the run: ${errorMessage(cause)}`
   } finally {
-    schedulePoll()
+    if (request === jobRequest)
+      schedulePoll()
   }
 }
 async function start() {
-  if (starting.value || running.value)
+  if (starting.value || running.value || savedLoading.value)
     return
+  const request = ++jobRequest
   starting.value = true
   error.value = ''
+  historyError.value = ''
   selectedResult.value = null
   page.value = 0
   filter.value = 'all'
   try {
-    job.value = await api.startBenchmark(count.value, concurrency.value)
+    const result = await api.startBenchmark(count.value, concurrency.value)
+    if (request !== jobRequest || !mounted)
+      return
+    job.value = result
+    ++historyRefresh.value
     localStorage.setItem('kbc-benchmark-id', job.value.id)
     schedulePoll()
   } catch (cause) {
-    error.value = errorMessage(cause)
+    if (request === jobRequest && mounted)
+      error.value = errorMessage(cause)
   } finally {
-    starting.value = false
+    if (request === jobRequest)
+      starting.value = false
   }
 }
 async function cancel() {
-  if (!job.value)
+  if (!job.value || cancelling.value)
     return
+  clearTimeout(pollTimer)
+  const request = ++jobRequest
   cancelling.value = true
   try {
-    job.value = await api.cancelBenchmark(job.value.id)
+    const result = await api.cancelBenchmark(job.value.id)
+    if (request !== jobRequest || !mounted)
+      return
+    job.value = result
     schedulePoll()
   } catch (cause) {
-    error.value = errorMessage(cause)
+    if (request === jobRequest && mounted)
+      error.value = errorMessage(cause)
   } finally {
-    cancelling.value = false
+    if (request === jobRequest) {
+      cancelling.value = false
+      schedulePoll()
+    }
+  }
+}
+async function loadSavedBenchmark(id: string, restoring = false) {
+  if (!restoring && (starting.value || cancelling.value || running.value)) {
+    historyError.value = 'Finish or stop the current benchmark before opening a saved result.'
+    return
+  }
+  clearTimeout(pollTimer)
+  const request = ++jobRequest
+  savedLoading.value = true
+  historyError.value = ''
+  try {
+    const result = await api.benchmark(id)
+    if (request !== jobRequest || !mounted)
+      return
+    job.value = result
+    selectedResult.value = null
+    sheetOpen.value = false
+    page.value = 0
+    filter.value = 'all'
+    error.value = ''
+    localStorage.setItem('kbc-benchmark-id', id)
+    schedulePoll()
+  } catch (cause) {
+    if (request === jobRequest && mounted)
+      historyError.value = `Could not load the saved benchmark: ${errorMessage(cause)}`
+  } finally {
+    if (request === jobRequest)
+      savedLoading.value = false
   }
 }
 function inspect(result: Analysis) {
@@ -102,70 +166,59 @@ onMounted(async () => {
   void api.health().then((value) => {
     health.value = value
   }).catch(() => { })
-  if (job.value) {
-    schedulePoll()
-    return
-  }
-  const savedId = localStorage.getItem('kbc-benchmark-id')
-  if (savedId) {
-    try {
-      job.value = await api.benchmark(savedId)
-      schedulePoll()
-    } catch {
-      localStorage.removeItem('kbc-benchmark-id')
-    }
-  }
+  const savedId = job.value?.id ?? localStorage.getItem('kbc-benchmark-id')
+  if (savedId)
+    await loadSavedBenchmark(savedId, true)
 })
 onBeforeUnmount(() => {
   mounted = false
   clearTimeout(pollTimer)
+  ++jobRequest
 })
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
-    <div class="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <p class="text-primary mb-2 text-[10px] font-semibold tracking-[0.2em] uppercase">
-          From one client to one thousand
-        </p><h1 class="text-3xl font-semibold tracking-tight">
-          Put scalability to the test.
-        </h1><p class="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
-          Run the same workflow at scale. Measure time, throughput and estimated cost, and inspect every decision.
-        </p>
-      </div><Badge
-        variant="outline"
-        class="gap-1.5 py-1.5"
-      >
-        <IconBolt class="text-primary size-3.5" /> Live execution
-      </Badge>
-    </div>
-
-    <section class="bg-card rounded-xl border p-5 sm:p-6">
-      <div class="grid gap-6 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-        <fieldset :disabled="running || starting">
-          <legend class="mb-3 text-xs font-medium">
-            01 · Batch size
-          </legend><div class="grid grid-cols-3 gap-2">
-            <button
+  <div class="flex flex-col gap-4 md:gap-6">
+    <Card>
+      <CardHeader>
+        <CardTitle>Run a benchmark</CardTitle>
+        <CardDescription>Measure processing time, throughput and estimated cost across synthetic clients.</CardDescription>
+        <CardAction>
+          <Badge variant="outline">
+            <IconBolt /> Live execution
+          </Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent class="grid gap-4 xl:grid-cols-[1fr_1fr_auto] xl:items-end">
+        <fieldset
+          :disabled="running || starting"
+          class="min-w-0"
+        >
+          <legend class="text-muted-foreground mb-2 text-xs font-medium">
+            Batch size
+          </legend>
+          <div class="grid grid-cols-3 gap-2">
+            <Button
               v-for="size in [10, 100, 1000]"
               :key="size"
-              class="hover:border-primary/50 rounded-lg border px-3 py-3 text-left transition disabled:opacity-50"
-              :class="count === size ? 'border-primary bg-primary/10' : 'bg-background/30'"
+              :variant="count === size ? 'default' : 'outline'"
+              :aria-pressed="count === size"
+              :disabled="running || starting"
+              class="tabular-nums"
               @click="count = size"
             >
-              <span
-                class="block text-lg font-semibold tabular-nums"
-                :class="count === size ? 'text-primary' : ''"
-              >{{ number(size) }}</span><span class="text-muted-foreground mt-1 block text-[10px]">clients</span>
-            </button>
+              {{ number(size) }} clients
+            </Button>
           </div>
         </fieldset>
         <div>
           <label
             for="concurrency"
-            class="mb-3 flex items-center justify-between text-xs font-medium"
-          ><span>02 · Concurrent clients</span><span class="text-primary tabular-nums">{{ concurrency }} / 10</span></label><div class="bg-background/30 rounded-lg border px-4 py-3">
+            class="text-muted-foreground mb-2 flex items-center justify-between text-xs font-medium"
+          >
+            <span>Concurrent clients</span><span class="tabular-nums">{{ concurrency }} / 10</span>
+          </label>
+          <div class="flex h-9 items-center rounded-md border px-3">
             <input
               id="concurrency"
               v-model.number="concurrency"
@@ -173,317 +226,349 @@ onBeforeUnmount(() => {
               min="1"
               max="10"
               step="1"
-              class="accent-primary my-1 w-full"
+              class="accent-primary w-full"
               :disabled="running || starting"
-            ><p class="text-muted-foreground mt-1 text-[10px]">
-              Parallel workflows · actual provider rate limits apply
-            </p>
+            >
           </div>
         </div>
         <Button
-          :disabled="starting || running || health?.jev_configured === false"
-          class="h-12 px-6"
+          :disabled="starting || running || savedLoading || health?.jev_configured === false"
           @click="start"
         >
           <IconLoader2
             v-if="starting"
-            class="size-4 animate-spin"
-          /><IconPlayerPlay
-            v-else
-            class="size-4"
-          />{{ starting ? 'Starting…' : running ? 'Run in progress' : 'Start benchmark' }}<IconArrowRight
-            v-if="!running && !starting"
-            class="size-4"
+            class="animate-spin"
           />
+          <IconPlayerPlay v-else />
+          {{ starting ? 'Starting…' : running ? 'Run in progress' : 'Start benchmark' }}
         </Button>
-      </div>
-      <p class="text-muted-foreground mt-4 text-xs leading-relaxed">
-        Every run makes real provider calls on synthetic client data. Costs include the configured pricing for Jev and any OpenAI category discovery. {{ health && !health.jev_configured ? 'Set JEV_API on the backend to run this benchmark.' : '' }}
-      </p>
-    </section>
-    <div
+      </CardContent>
+      <CardFooter class="text-muted-foreground text-xs">
+        Every run calls Jev and, when needed, OpenAI with synthetic data. Estimates use configured provider pricing; rate limits apply.
+        {{ health && !health.jev_configured ? 'Set JEV_API on the backend to run this benchmark.' : '' }}
+      </CardFooter>
+    </Card>
+    <p
       v-if="error"
       role="alert"
-      class="border-destructive/30 bg-destructive/10 text-destructive rounded-xl border p-4 text-sm"
+      class="border-destructive/30 text-destructive rounded-xl border p-4 text-sm"
     >
       {{ error }}
-    </div>
-
+    </p>
     <template v-if="job">
-      <section class="bg-card rounded-xl border p-5">
-        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <Card>
+        <CardHeader class="flex flex-wrap items-center justify-between gap-3">
+          <div class="grid gap-1">
+            <CardTitle class="flex items-center gap-2">
+              <IconLoader2
+                v-if="running"
+                class="text-primary size-4 animate-spin"
+              />
+              {{ job.status === 'running' ? 'Benchmark running' : job.status === 'completed' ? 'Benchmark complete' : job.status === 'cancelled' ? 'Benchmark stopped' : 'Benchmark failed' }}
+            </CardTitle>
+            <CardDescription>{{ number(job.completed_count) }} / {{ number(job.requested_count) }} clients processed · concurrency {{ job.concurrency }}</CardDescription>
+          </div>
           <div class="flex items-center gap-3">
-            <IconLoader2
-              v-if="running"
-              class="text-primary size-5 animate-spin"
-            /><span
-              v-else
-              class="bg-primary/15 text-primary flex size-8 items-center justify-center rounded-full"
-            ><IconBolt class="size-4" /></span><div>
-              <h2 class="text-sm font-semibold">
-                {{ job.status === 'running' ? 'Benchmark running' : job.status === 'completed' ? 'Benchmark complete' : job.status === 'cancelled' ? 'Benchmark stopped' : 'Benchmark failed' }}
-              </h2><p class="text-muted-foreground mt-1 text-xs">
-                {{ number(job.completed_count) }} / {{ number(job.requested_count) }} clients processed · concurrency {{ job.concurrency }}
-              </p>
-            </div>
-          </div><div class="flex items-center gap-3">
-            <span class="text-primary font-mono text-sm">{{ number(progress) }}%</span><Button
+            <Badge
+              variant="outline"
+              class="tabular-nums"
+            >
+              {{ number(progress) }}%
+            </Badge>
+            <Button
               v-if="running"
               variant="outline"
               size="sm"
               :disabled="cancelling"
               @click="cancel"
             >
-              <IconPlayerStop class="size-3.5" />{{ cancelling ? 'Stopping…' : 'Stop run' }}
-            </Button><Button
+              <IconPlayerStop /> {{ cancelling ? 'Stopping…' : 'Stop run' }}
+            </Button>
+            <Button
               v-else
               variant="outline"
               size="sm"
               @click="exportResults"
             >
-              <IconDownload class="size-3.5" /> Export JSON
+              <IconDownload /> Export JSON
             </Button>
           </div>
-        </div>
-        <div
-          class="bg-muted h-1.5 overflow-hidden rounded-full"
-          role="progressbar"
-          :aria-valuenow="job.completed_count"
-          :aria-valuemin="0"
-          :aria-valuemax="job.requested_count"
-          aria-label="Clients processed"
-        >
+        </CardHeader>
+        <CardContent>
           <div
-            class="bg-primary h-full rounded-full transition-all duration-500"
-            :style="{ width: `${progress}%` }"
-          />
-        </div><p
-          v-if="job.error"
-          class="text-destructive mt-3 text-xs"
-        >
-          {{ job.error }}
-        </p><p
-          v-if="cancelling"
-          class="text-muted-foreground mt-3 text-xs"
-        >
-          In-flight requests finish first so their usage is included.
-        </p>
-      </section>
+            class="bg-muted h-1.5 overflow-hidden rounded-full"
+            role="progressbar"
+            :aria-valuenow="job.completed_count"
+            :aria-valuemin="0"
+            :aria-valuemax="job.requested_count"
+            aria-label="Clients processed"
+          >
+            <div
+              class="bg-primary h-full rounded-full transition-all duration-500"
+              :style="{ width: `${progress}%` }"
+            />
+          </div>
+          <p
+            v-if="job.error"
+            class="text-destructive mt-3 text-sm"
+          >
+            {{ job.error }}
+          </p>
+          <p
+            v-if="cancelling"
+            class="text-muted-foreground mt-3 text-sm"
+          >
+            In-flight requests finish first so their usage is included.
+          </p>
+        </CardContent>
+      </Card>
 
-      <div class="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <div
+      <div class="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+        <Card
           v-for="metric in [
-            { label: 'Wall-clock duration', value: duration(job.elapsed_ms), hint: 'Entire run, including waiting time', icon: IconClock },
-            { label: 'Client throughput', value: `${number(job.metrics.clients_per_second)} / s`, hint: 'All processed clients / elapsed time', icon: IconUsers },
-            { label: 'Estimated total cost', value: dollars(job.metrics.estimated_cost_usd), hint: job.metrics.usage_source === 'provider' ? 'Provider-reported token usage' : 'Includes estimated token usage', icon: IconCurrencyDollar },
-            { label: 'Cost per processed client', value: job.completed_count ? dollars(job.metrics.estimated_cost_usd / job.completed_count) : '—', hint: 'Includes abstentions and opt-outs', icon: IconBolt }
+            { label: 'Wall-clock duration', value: duration(job.elapsed_ms), badge: 'Measured', title: 'Time for the entire run', hint: 'Includes provider waiting time', icon: IconClock },
+            { label: 'Client throughput', value: `${number(job.metrics.clients_per_second)} / s`, badge: 'Measured', title: 'Processed clients per second', hint: 'All decisions / elapsed time', icon: IconUsers },
+            { label: 'Estimated total cost', value: dollars(job.metrics.estimated_cost_usd), badge: 'Estimate', title: 'Jev and OpenAI usage', hint: job.metrics.usage_source === 'provider' ? 'Provider-reported token usage' : 'Includes estimated token usage', icon: IconCurrencyDollar },
+            { label: 'Cost per client', value: job.completed_count ? dollars(job.metrics.estimated_cost_usd / job.completed_count) : '—', badge: 'Estimate', title: 'Cost per processed client', hint: 'Includes abstentions and opt-outs', icon: IconBolt }
           ]"
           :key="metric.label"
-          class="bg-card rounded-xl border p-5"
+          class="@container/card"
         >
-          <div class="text-muted-foreground mb-4 flex items-center justify-between gap-2 text-xs">
-            <span>{{ metric.label }}</span><component
-              :is="metric.icon"
-              class="size-4"
-            />
-          </div><p class="text-2xl font-semibold tracking-tight tabular-nums">
-            {{ metric.value }}
-          </p><p class="text-muted-foreground mt-2 text-[10px] leading-relaxed">
-            {{ metric.hint }}
-          </p>
-        </div>
-      </div>
-      <div class="grid gap-5 lg:grid-cols-2">
-        <section class="bg-card rounded-xl border p-5">
-          <h3 class="mb-5 text-sm font-semibold">
-            Decision distribution
-          </h3><div class="bg-muted mb-5 flex h-3 overflow-hidden rounded-full">
-            <div
-              v-for="outcome in outcomes"
-              :key="outcome.label"
-              :class="outcome.class"
-              :style="{ width: `${job.completed_count ? outcome.value / job.completed_count * 100 : 0}%` }"
-            />
-          </div><div class="grid grid-cols-4 gap-2">
-            <div
-              v-for="outcome in outcomes"
-              :key="outcome.label"
-            >
-              <p
-                class="text-lg font-semibold tabular-nums"
-                :class="outcome.text"
-              >
-                {{ number(outcome.value) }}
-              </p><p class="text-muted-foreground mt-1 text-[10px]">
-                {{ outcome.label }}
-              </p>
+          <CardHeader>
+            <CardDescription>{{ metric.label }}</CardDescription>
+            <CardTitle class="col-span-2 text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              {{ metric.value }}
+            </CardTitle>
+            <CardAction class="row-span-1">
+              <Badge variant="outline">
+                <component :is="metric.icon" /> {{ metric.badge }}
+              </Badge>
+            </CardAction>
+          </CardHeader>
+          <CardFooter class="flex-col items-start gap-1.5 text-sm">
+            <div class="font-medium">
+              {{ metric.title }}
             </div>
-          </div><p class="text-muted-foreground mt-4 text-[10px] leading-relaxed">
-            Abstentions are valid decisions. Technical errors and personalization opt-outs are counted separately.
-          </p>
-        </section>
-        <section class="bg-card rounded-xl border p-5">
-          <h3 class="mb-5 text-sm font-semibold">
-            Latency & API usage
-          </h3><div class="grid grid-cols-3 gap-x-3 gap-y-5">
+            <div class="text-muted-foreground">
+              {{ metric.hint }}
+            </div>
+          </CardFooter>
+        </Card>
+      </div>
+      <div class="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Decision distribution</CardTitle>
+            <CardDescription>Outcomes across all processed clients.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div class="bg-muted mb-4 flex h-2 overflow-hidden rounded-full">
+              <div
+                v-for="outcome in outcomes"
+                :key="outcome.label"
+                :class="outcome.class"
+                :style="{ width: `${job.completed_count ? outcome.value / job.completed_count * 100 : 0}%` }"
+              />
+            </div>
+            <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div
+                v-for="outcome in outcomes"
+                :key="outcome.label"
+              >
+                <div
+                  class="text-2xl font-semibold tabular-nums"
+                  :class="outcome.text"
+                >
+                  {{ number(outcome.value) }}
+                </div>
+                <div class="text-muted-foreground text-xs">
+                  {{ outcome.label }}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter class="text-muted-foreground text-xs">
+            Abstentions are valid decisions. Errors and personalization opt-outs are counted separately.
+          </CardFooter>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Latency &amp; API usage</CardTitle>
+            <CardDescription>Client latency and token consumption during this run.</CardDescription>
+          </CardHeader>
+          <CardContent class="grid grid-cols-3 gap-4">
             <div
               v-for="metric in [{ label: 'Median · p50', value: duration(job.metrics.p50_latency_ms) }, { label: 'Tail · p95', value: duration(job.metrics.p95_latency_ms) }, { label: 'Average', value: duration(job.metrics.average_latency_ms) }, { label: 'Provider calls', value: number(job.metrics.api_calls) }, { label: 'Input tokens', value: number(job.metrics.input_tokens) }, { label: 'Output tokens', value: number(job.metrics.output_tokens) }]"
               :key="metric.label"
             >
-              <p class="text-muted-foreground text-[10px]">
+              <div class="text-muted-foreground text-xs">
                 {{ metric.label }}
-              </p><p class="mt-1 text-base font-medium tabular-nums">
+              </div>
+              <div class="mt-1 text-lg font-medium tabular-nums">
                 {{ metric.value }}
-              </p>
+              </div>
             </div>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
       </div>
 
-      <section
-        v-if="job.category_registry_before && job.category_registry_after"
-        class="bg-card rounded-xl border p-5"
-      >
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 class="text-sm font-semibold">
-              Category learning during this run
-            </h3><p class="text-muted-foreground mt-1 text-xs">
-              {{ job.category_registry_before.count }} categories before · {{ job.category_registry_after.count }} now · {{ job.metrics.openai_calls }} OpenAI calls
-            </p>
-          </div><Button
+      <Card v-if="job.category_registry_before && job.category_registry_after">
+        <CardHeader class="flex flex-wrap items-center justify-between gap-3">
+          <div class="grid gap-1">
+            <CardTitle>Category learning</CardTitle>
+            <CardDescription>{{ job.category_registry_before.count }} categories before · {{ job.category_registry_after.count }} now · {{ job.metrics.openai_calls }} OpenAI calls</CardDescription>
+          </div>
+          <Button
             as-child
             variant="outline"
             size="sm"
           >
-            <NuxtLink to="/categories">View registry <IconArrowRight class="size-3.5" /></NuxtLink>
+            <NuxtLink to="/categories">View registry <IconArrowRight /></NuxtLink>
           </Button>
-        </div><div
-          v-if="job.category_registry_after.labels.some(label => !job?.category_registry_before?.labels.includes(label))"
-          class="mt-4 flex flex-wrap gap-2"
-        >
-          <Badge
-            v-for="label in job.category_registry_after.labels.filter(label => !job?.category_registry_before?.labels.includes(label))"
-            :key="label"
-            variant="secondary"
+        </CardHeader>
+        <CardContent>
+          <div
+            v-if="job.category_registry_after.labels.some(label => !job?.category_registry_before?.labels.includes(label))"
+            class="flex flex-wrap gap-2"
           >
-            New · {{ label }}
-          </Badge>
-        </div><p
-          v-else
-          class="text-muted-foreground mt-3 text-xs"
-        >
-          No new category has been saved during this run.
-        </p><div
+            <Badge
+              v-for="label in job.category_registry_after.labels.filter(label => !job?.category_registry_before?.labels.includes(label))"
+              :key="label"
+              variant="outline"
+            >
+              New · {{ label }}
+            </Badge>
+          </div>
+          <p
+            v-else
+            class="text-muted-foreground text-sm"
+          >
+            No new category has been saved during this run.
+          </p>
+        </CardContent>
+        <CardFooter
           v-if="job.metrics.providers"
-          class="mt-4 grid gap-3 border-t pt-4 sm:grid-cols-2"
+          class="grid gap-3 sm:grid-cols-2"
         >
           <div
             v-for="(provider, name) in job.metrics.providers"
             :key="name"
-            class="text-xs"
+            class="text-sm"
           >
-            <span class="font-medium uppercase">{{ name }}</span><span class="text-muted-foreground ml-2">{{ number(provider.api_calls) }} calls · {{ dollars(provider.estimated_cost_usd) }} estimated</span>
+            <span class="font-medium">{{ String(name).toLowerCase() === 'openai' ? 'OpenAI' : 'Jev' }}</span>
+            <span class="text-muted-foreground ml-2">{{ number(provider.api_calls) }} calls · {{ dollars(provider.estimated_cost_usd) }} estimated</span>
           </div>
-        </div>
-      </section>
+        </CardFooter>
+      </Card>
 
-      <section class="bg-card overflow-hidden rounded-xl border">
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b p-5">
-          <div>
-            <h3 class="text-sm font-semibold">
-              Client results
-            </h3><p class="text-muted-foreground mt-1 text-xs">
-              Select a client to inspect profiles, evidence and generated advertisements.
-            </p>
-          </div><select
-            v-model="filter"
-            aria-label="Filter results"
-            class="bg-background h-9 rounded-lg border px-3 text-xs"
-          >
-            <option value="all">
-              All decisions
-            </option><option value="recommended">
-              With offers
-            </option><option value="abstained">
-              Abstained
-            </option><option value="opt_out">
-              Opted out
-            </option><option value="error">
-              Technical errors
-            </option>
-          </select>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs">
-            <thead class="bg-muted/25 text-muted-foreground">
-              <tr>
-                <th class="px-5 py-3 font-normal">
-                  Client
-                </th><th class="px-4 py-3 font-normal">
-                  Decision
-                </th><th class="px-4 py-3 font-normal">
-                  Profiles
-                </th><th class="px-4 py-3 font-normal">
+      <Card>
+        <CardHeader class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="grid gap-1">
+            <CardTitle>Client results</CardTitle>
+            <CardDescription>Select a client to inspect profiles, evidence and generated advertisements.</CardDescription>
+          </div>
+          <Select v-model="filter">
+            <SelectTrigger
+              aria-label="Filter results"
+              class="w-full sm:w-44"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">
+                All decisions
+              </SelectItem>
+              <SelectItem value="recommended">
+                With offers
+              </SelectItem>
+              <SelectItem value="abstained">
+                Abstained
+              </SelectItem>
+              <SelectItem value="opt_out">
+                Opted out
+              </SelectItem>
+              <SelectItem value="error">
+                Technical errors
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Client</TableHead>
+                <TableHead>Decision</TableHead>
+                <TableHead>Profiles</TableHead>
+                <TableHead class="text-right">
                   Ads
-                </th><th class="px-4 py-3 font-normal">
+                </TableHead>
+                <TableHead class="text-right">
                   Duration
-                </th><th class="px-5 py-3 text-right font-normal">
+                </TableHead>
+                <TableHead class="text-right">
                   Est. cost
-                </th>
-              </tr>
-            </thead><tbody class="divide-y">
-              <tr
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
                 v-for="result in visibleResults"
                 :key="result.client.id"
-                class="hover:bg-muted/30 cursor-pointer"
+                class="cursor-pointer"
                 @click="inspect(result)"
               >
-                <td class="px-5 py-4">
+                <TableCell>
                   <button
                     class="text-left font-medium hover:underline"
                     @click.stop="inspect(result)"
                   >
                     {{ result.client.name }}
-                  </button><span class="text-muted-foreground mt-1 block text-[10px]">{{ result.client.city }}</span>
-                </td><td class="px-4 py-4">
-                  <Badge
-                    :variant="result.status === 'recommended' ? 'default' : result.status === 'error' ? 'destructive' : 'secondary'"
-                    class="text-[9px]"
-                  >
+                  </button>
+                  <div class="text-muted-foreground text-xs">
+                    {{ result.client.city }}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge :variant="result.status === 'error' ? 'destructive' : 'outline'">
                     {{ statusLabels[result.status] }}
                   </Badge>
-                </td><td class="text-muted-foreground max-w-48 truncate px-4 py-4">
+                </TableCell>
+                <TableCell class="text-muted-foreground max-w-48 truncate">
                   {{ result.profiles.map(profile => profile.label).join(', ') || '—' }}
-                </td><td class="px-4 py-4 tabular-nums">
+                </TableCell>
+                <TableCell class="text-right tabular-nums">
                   {{ result.ads.length }}
-                </td><td class="px-4 py-4 whitespace-nowrap tabular-nums">
+                </TableCell>
+                <TableCell class="text-right tabular-nums">
                   {{ duration(result.metrics.duration_ms) }}
-                </td><td class="px-5 py-4 text-right whitespace-nowrap tabular-nums">
+                </TableCell>
+                <TableCell class="text-right tabular-nums">
                   {{ dollars(result.metrics.estimated_cost_usd) }}
-                </td>
-              </tr><tr v-if="!visibleResults.length">
-                <td
-                  colspan="6"
-                  class="text-muted-foreground py-10 text-center"
-                >
-                  {{ running ? 'Waiting for the first matching result…' : 'No results in this view.' }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="text-muted-foreground flex items-center justify-between border-t px-5 py-3 text-xs">
-          <span>{{ number(filteredResults.length) }} results</span><div class="flex gap-2">
+                </TableCell>
+              </TableRow>
+              <TableEmpty
+                v-if="!visibleResults.length"
+                :colspan="6"
+              >
+                {{ running ? 'Waiting for the first matching result…' : 'No results in this view.' }}
+              </TableEmpty>
+            </TableBody>
+          </Table>
+        </CardContent>
+        <CardFooter class="flex flex-wrap justify-between gap-3">
+          <span class="text-muted-foreground text-xs">{{ number(filteredResults.length) }} results</span>
+          <div class="flex gap-2">
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               :disabled="page === 0"
               @click="page--"
             >
               Previous
-            </Button><Button
-              variant="ghost"
+            </Button>
+            <Button
+              variant="outline"
               size="sm"
               :disabled="(page + 1) * 20 >= filteredResults.length"
               @click="page++"
@@ -491,32 +576,47 @@ onBeforeUnmount(() => {
               Next
             </Button>
           </div>
-        </div>
-      </section>
-      <p class="text-muted-foreground text-xs leading-relaxed">
+        </CardFooter>
+      </Card>
+      <p class="text-muted-foreground text-xs">
         Measured for this run only; throughput is not a capacity guarantee. Cost uses configured token rates and may include estimates, retries and category discovery. Partial or stopped runs are reported as measured.
       </p>
     </template>
-    <section
-      v-else
-      class="flex flex-col items-center rounded-xl border border-dashed px-6 py-16 text-center"
+    <Card v-else>
+      <CardHeader>
+        <CardTitle>No benchmark results yet</CardTitle>
+        <CardDescription>Choose a batch size and start the workflow. Live metrics and individual client outcomes will appear here.</CardDescription>
+      </CardHeader>
+    </Card>
+    <p
+      v-if="savedLoading"
+      role="status"
+      class="text-muted-foreground flex items-center gap-2 text-sm"
     >
-      <div class="bg-primary/10 text-primary mb-5 rounded-2xl p-4">
-        <IconBolt class="size-7" />
-      </div><h2 class="mb-2 text-lg font-medium">
-        A real answer to “does it scale?”
-      </h2><p class="text-muted-foreground max-w-md text-sm leading-relaxed">
-        Choose a batch size and launch the workflow. Live metrics and individual outcomes will appear here.
-      </p>
-    </section>
+      <IconLoader2 class="size-4 animate-spin" /> Loading saved benchmark…
+    </p>
+    <p
+      v-if="historyError"
+      role="alert"
+      class="text-destructive text-sm"
+    >
+      {{ historyError }}
+    </p>
+    <RunHistory
+      kind="benchmark"
+      :refresh-key="historyRefresh"
+      @select="loadSavedBenchmark"
+    />
     <Sheet v-model:open="sheetOpen">
       <SheetContent
         side="right"
         class="w-full overflow-y-auto p-6 sm:max-w-4xl"
       >
-        <SheetHeader class="mb-5 p-0 pr-8">
-          <SheetTitle>Inspect a client result</SheetTitle><SheetDescription>Evidence, decisions and advertisements from this benchmark run.</SheetDescription>
-        </SheetHeader><AnalysisResult
+        <SheetHeader class="mb-4 p-0 pr-8">
+          <SheetTitle>Inspect a client result</SheetTitle>
+          <SheetDescription>Evidence, decisions and advertisements from this benchmark run.</SheetDescription>
+        </SheetHeader>
+        <AnalysisResult
           v-if="selectedResult"
           :analysis="selectedResult"
           show-client

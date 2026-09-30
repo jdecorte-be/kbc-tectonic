@@ -4,6 +4,7 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { PROFILES } from '@/data/mock'
 import type { Client } from '@/data/mock'
+import { ageLabel } from '@/lib/api'
 
 const props = defineProps<{ client: Client | null }>()
 const open = defineModel<boolean>('open', { default: false })
@@ -20,7 +21,7 @@ const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
         <SheetHeader>
           <SheetTitle>{{ client.name }}</SheetTitle>
           <SheetDescription>
-            {{ client.age }} years · payday on the {{ client.payday }}th ·
+            {{ ageLabel(client.age) }} · payday on the {{ client.payday }}th ·
             <NuxtLink
               :to="`/client/${client.id}`"
               class="text-primary underline"

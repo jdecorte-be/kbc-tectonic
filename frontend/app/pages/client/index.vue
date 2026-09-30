@@ -3,7 +3,9 @@ import { IconArrowUpRight, IconChevronLeft, IconChevronRight, IconLoader2, IconS
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { countryName, errorMessage, euros, number, type ClientSummary } from '@/lib/api'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ageLabel, countryName, errorMessage, euros, number, type ClientSummary } from '@/lib/api'
 
 definePageMeta({ title: 'Synthetic clients' })
 const api = useKbcApi()
@@ -52,141 +54,152 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
-    <div class="flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <p class="text-primary mb-2 text-[10px] font-semibold tracking-[0.2em] uppercase">
-          The evidence behind every decision
-        </p><h1 class="text-3xl font-semibold tracking-tight">
-          Synthetic clients
-        </h1><p class="text-muted-foreground mt-2 text-sm">
-          Explore generated banking histories and run the complete workflow for any client.
-        </p>
-      </div><Badge
-        variant="outline"
-        class="gap-2 py-2"
-      >
-        <IconUsers class="text-primary size-4" /> {{ number(total) }} clients
-      </Badge>
-    </div>
-    <section class="bg-card overflow-hidden rounded-xl border">
-      <div class="border-b p-5">
-        <div class="relative max-w-sm">
-          <IconSearch class="text-muted-foreground absolute top-2.5 left-3 size-4" /><Input
-            v-model="search"
-            placeholder="Search by name, client ID or city…"
-            aria-label="Search clients"
-            class="h-9 pl-9"
-          />
+  <div class="flex flex-col gap-4 md:gap-6">
+    <Card>
+      <CardHeader class="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div class="grid flex-1 gap-1">
+          <CardTitle>Synthetic clients</CardTitle>
+          <CardDescription>Select a client to inspect their banking history and run the profiling workflow.</CardDescription>
+        </div>
+        <Badge variant="outline">
+          <IconUsers /> {{ number(total) }} clients
+        </Badge>
+      </CardHeader>
+      <div class="px-4">
+        <div class="flex max-w-sm flex-col gap-1.5">
+          <label
+            for="client-search"
+            class="text-muted-foreground text-xs font-medium"
+          >Search</label>
+          <div class="relative">
+            <IconSearch class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+            <Input
+              id="client-search"
+              v-model="search"
+              placeholder="Name, client ID or city…"
+              class="pl-8"
+            />
+          </div>
         </div>
       </div>
-      <p
-        v-if="error"
-        role="alert"
-        class="text-destructive p-5 text-sm"
-      >
-        {{ error }}<Button
-          variant="outline"
-          size="sm"
-          class="ml-3"
-          @click="load"
+      <CardContent>
+        <p
+          v-if="error"
+          role="alert"
+          class="text-destructive py-6 text-sm"
         >
-          Retry
-        </Button>
-      </p>
-      <div
-        v-else-if="loading"
-        class="text-muted-foreground flex items-center justify-center gap-2 p-12 text-sm"
-      >
-        <IconLoader2 class="size-4 animate-spin" /> Loading clients…
-      </div>
-      <div
-        v-else
-        class="overflow-x-auto"
-      >
-        <table class="w-full text-left text-sm">
-          <thead class="bg-muted/30 text-muted-foreground text-xs">
-            <tr>
-              <th class="px-5 py-3 font-normal">
-                Client
-              </th><th class="px-4 py-3 font-normal">
-                Location
-              </th><th class="px-4 py-3 text-right font-normal">
+          {{ error }}
+          <Button
+            variant="outline"
+            size="sm"
+            class="ml-3"
+            @click="load"
+          >
+            Retry
+          </Button>
+        </p>
+        <div
+          v-else-if="loading"
+          class="text-muted-foreground flex items-center justify-center gap-2 py-12 text-sm"
+        >
+          <IconLoader2 class="size-4 animate-spin" /> Loading clients…
+        </div>
+        <Table v-else>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead class="text-right">
                 Balance
-              </th><th class="px-4 py-3 text-right font-normal">
+              </TableHead>
+              <TableHead class="text-right">
                 Transactions
-              </th><th class="px-4 py-3 font-normal">
-                Personalization
-              </th><th class="px-5 py-3 text-right font-normal">
+              </TableHead>
+              <TableHead>Personalization</TableHead>
+              <TableHead class="text-right">
                 Workflow
-              </th>
-            </tr>
-          </thead><tbody class="divide-y">
-            <tr
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
               v-for="client in clients"
               :key="client.id"
-              class="hover:bg-muted/25"
             >
-              <td class="px-5 py-4">
+              <TableCell>
                 <NuxtLink
                   :to="`/client/${client.id}`"
                   class="font-medium hover:underline"
-                >{{ client.name }}</NuxtLink><span class="text-muted-foreground mt-1 block font-mono text-[10px]">{{ client.id }} · {{ client.age }} years</span>
-              </td><td class="px-4 py-4 text-xs">
-                {{ client.city }}<span class="text-muted-foreground mt-1 block">{{ countryName(client.country) }}</span>
-              </td><td class="px-4 py-4 text-right whitespace-nowrap tabular-nums">
+                >
+                  {{ client.name }}
+                </NuxtLink>
+                <div class="text-muted-foreground text-xs">
+                  {{ client.id }} · {{ ageLabel(client.age) }}
+                </div>
+              </TableCell>
+              <TableCell>
+                {{ client.city }}
+                <div class="text-muted-foreground text-xs">
+                  {{ countryName(client.country) }}
+                </div>
+              </TableCell>
+              <TableCell class="text-right tabular-nums">
                 {{ euros(client.balance) }}
-              </td><td class="px-4 py-4 text-right tabular-nums">
-                {{ client.transaction_count }}
-              </td><td class="px-4 py-4">
+              </TableCell>
+              <TableCell class="text-right tabular-nums">
+                {{ number(client.transaction_count) }}
+              </TableCell>
+              <TableCell>
                 <Badge
-                  :variant="client.personalization_allowed ? 'secondary' : 'outline'"
-                  class="text-[10px]"
+                  variant="outline"
+                  :class="!client.personalization_allowed && 'text-muted-foreground'"
                 >
                   {{ client.personalization_allowed ? 'Allowed' : 'Declined' }}
                 </Badge>
-              </td><td class="px-5 py-4 text-right">
+              </TableCell>
+              <TableCell class="text-right">
                 <Button
                   as-child
                   variant="ghost"
                   size="sm"
                 >
-                  <NuxtLink :to="`/client/${client.id}`">Analyze <IconArrowUpRight class="size-3.5" /></NuxtLink>
+                  <NuxtLink :to="`/client/${client.id}`">Analyze <IconArrowUpRight /></NuxtLink>
                 </Button>
-              </td>
-            </tr><tr v-if="!clients.length">
-              <td
-                colspan="6"
-                class="text-muted-foreground p-12 text-center"
-              >
-                No clients match your search.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="text-muted-foreground flex items-center justify-between border-t px-5 py-3 text-xs">
-        <span>{{ total ? offset + 1 : 0 }}–{{ Math.min(offset + 30, total) }} of {{ number(total) }} clients</span><div class="flex gap-2">
+              </TableCell>
+            </TableRow>
+            <TableEmpty
+              v-if="!clients.length"
+              :colspan="6"
+            >
+              No clients match your search.
+            </TableEmpty>
+          </TableBody>
+        </Table>
+      </CardContent>
+      <CardFooter class="flex flex-wrap justify-between gap-3">
+        <span class="text-muted-foreground text-xs">{{ total ? offset + 1 : 0 }}–{{ Math.min(offset + 30, total) }} of {{ number(total) }} clients</span>
+        <div class="flex gap-2">
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             :disabled="offset === 0 || loading"
             @click="next(-1)"
           >
-            <IconChevronLeft class="size-3.5" /> Previous
-          </Button><Button
-            variant="ghost"
+            <IconChevronLeft /> Previous
+          </Button>
+          <Button
+            variant="outline"
             size="sm"
             :disabled="offset + 30 >= total || loading"
             @click="next(1)"
           >
-            Next <IconChevronRight class="size-3.5" />
+            Next <IconChevronRight />
           </Button>
         </div>
-      </div>
-    </section>
+      </CardFooter>
+    </Card>
     <p class="text-muted-foreground text-xs">
-      All customers, transactions, balances and commercial preferences are synthetic. Generator scenario labels are excluded from the profiling evidence.
+      All clients, transactions, balances and commercial preferences are synthetic. Generator scenario labels are excluded from the profiling evidence.
     </p>
   </div>
 </template>

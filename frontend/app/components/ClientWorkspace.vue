@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { IconArrowRight, IconCheck, IconChevronLeft, IconChevronRight, IconDatabase, IconFingerprint, IconLoader2, IconPlayerPlay, IconSearch, IconShieldCheck, IconSparkles } from '@tabler/icons-vue'
+import { IconCalendar, IconChevronLeft, IconChevronRight, IconCreditCard, IconFingerprint, IconLoader2, IconPlayerPlay, IconSearch, IconShieldCheck, IconShoppingBag, IconWallet } from '@tabler/icons-vue'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { countryName, duration, errorMessage, number, type Analysis, type ClientDetail, type ClientSummary } from '@/lib/api'
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ageLabel, analysisSchema, countryName, duration, errorMessage, euros, number, type Analysis, type ClientDetail, type ClientSummary } from '@/lib/api'
 
 const props = defineProps<{
   initialClientId?: string
@@ -21,11 +23,21 @@ const detail = ref<ClientDetail | null>(null)
 const selectedId = ref(props.initialClientId ?? '')
 const analysis = ref<Analysis | null>(null)
 const running = ref(false)
+const savedLoading = ref(false)
+const historyError = ref('')
+const historyRefresh = ref(0)
 const elapsed = ref(0)
 const error = ref('')
 const listError = ref('')
+const cards = computed(() => [
+  { label: 'Account balance', value: detail.value ? euros(detail.value.client.balance) : '—', badge: 'Current', icon: IconWallet, title: detail.value?.client.name ?? 'Select a client', hint: 'Observed balance on this account' },
+  { label: 'Transactions', value: detail.value ? number(detail.value.client.transaction_count) : '—', badge: 'Observed', icon: IconCreditCard, title: 'Payments, transfers and income', hint: 'Evidence used to build the profile' },
+  { label: 'Available history', value: detail.value ? `${detail.value.facts.observation_days ?? '—'} days` : '—', badge: 'History', icon: IconCalendar, title: 'Habits across the observed period', hint: 'Short histories can limit confidence' },
+  { label: 'Available products', value: health.value ? number(health.value.product_count) : '—', badge: 'Catalog', icon: IconShoppingBag, title: 'Offers checked for relevance', hint: 'Recommendations require supporting evidence' }
+])
 let listRequest = 0
 let detailRequest = 0
+let analysisRequest = 0
 let debounce: ReturnType<typeof setTimeout> | undefined
 let timer: ReturnType<typeof setInterval> | undefined
 async function loadClients() {
@@ -52,6 +64,9 @@ async function selectClient(id: string) {
   if (running.value)
     return
   selectedId.value = id
+  ++analysisRequest
+  savedLoading.value = false
+  historyError.value = ''
   analysis.value = null
   detail.value = null
   error.value = ''
@@ -70,23 +85,55 @@ async function selectClient(id: string) {
   }
 }
 async function run() {
-  if (!detail.value || running.value)
+  if (!detail.value || running.value || savedLoading.value)
     return
+  const clientId = detail.value.client.id
+  const request = ++analysisRequest
   running.value = true
   error.value = ''
-  analysis.value = null
+  historyError.value = ''
   elapsed.value = 0
   const started = Date.now()
   timer = setInterval(() => {
     elapsed.value = Date.now() - started
   }, 100)
   try {
-    analysis.value = await api.analyze(detail.value.client.id)
+    const result = await api.analyze(clientId)
+    if (request === analysisRequest && selectedId.value === clientId)
+      analysis.value = result
   } catch (cause) {
-    error.value = errorMessage(cause)
+    if (request === analysisRequest)
+      error.value = errorMessage(cause)
   } finally {
-    running.value = false
+    if (request === analysisRequest) {
+      running.value = false
+      ++historyRefresh.value
+    }
     clearInterval(timer)
+  }
+}
+async function loadSavedAnalysis(id: string) {
+  if (running.value) {
+    historyError.value = 'Wait for the current analysis to finish before opening a saved result.'
+    return
+  }
+  const clientId = selectedId.value
+  const request = ++analysisRequest
+  savedLoading.value = true
+  historyError.value = ''
+  try {
+    const result = analysisSchema.parse(await $fetch(`/api/analyses/${encodeURIComponent(id)}`))
+    if (request !== analysisRequest || selectedId.value !== clientId)
+      return
+    if (result.client.id !== clientId)
+      throw new Error('This saved result belongs to another client. Refresh the history and try again.')
+    analysis.value = result
+  } catch (cause) {
+    if (request === analysisRequest)
+      historyError.value = `Could not load the saved result: ${errorMessage(cause)}`
+  } finally {
+    if (request === analysisRequest)
+      savedLoading.value = false
   }
 }
 function changePage(direction: number) {
@@ -117,47 +164,39 @@ onBeforeUnmount(() => {
   clearInterval(timer)
   ++listRequest
   ++detailRequest
+  ++analysisRequest
 })
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
-    <div class="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <p class="text-primary mb-2 text-[10px] font-semibold tracking-[0.2em] uppercase">
-          Customer intelligence
-        </p><h1 class="text-3xl font-semibold tracking-tight">
-          Understand. Match. Recommend.
-        </h1><p class="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
-          Turn a synthetic client’s transaction history into an explained profile and relevant product offers.
-        </p>
-      </div>
-      <div class="bg-card flex items-center gap-2 rounded-full border px-3 py-2 text-xs">
-        <span
-          class="size-1.5 rounded-full"
-          :class="health?.jev_configured ? 'bg-primary' : 'bg-muted-foreground'"
-        />{{ health ? (health.jev_configured ? 'Jev connected' : 'Jev not configured') : healthFailed ? 'API unavailable' : 'Connecting to API…' }}
-      </div>
-    </div>
-
-    <div class="bg-card grid grid-cols-1 rounded-xl border sm:grid-cols-3">
-      <div
-        v-for="(step, index) in [{ icon: IconDatabase, label: 'Read the evidence', caption: 'Balance, transactions & recurring habits' }, { icon: IconFingerprint, label: 'Build the profile', caption: 'Jev classification & category discovery' }, { icon: IconSparkles, label: 'Select relevant offers', caption: 'Product fit, confidence & clear reasoning' }]"
-        :key="step.label"
-        class="flex items-center gap-3 px-5 py-4"
-        :class="index ? 'border-t sm:border-t-0 sm:border-l' : ''"
+  <div class="flex flex-col gap-4 md:gap-6">
+    <div class="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+      <Card
+        v-for="card in cards"
+        :key="card.label"
+        class="@container/card"
       >
-        <span class="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg"><component
-          :is="step.icon"
-          class="size-4"
-        /></span><div>
-          <p class="text-xs font-medium">
-            <span class="text-muted-foreground mr-1.5">0{{ index + 1 }}</span>{{ step.label }}
-          </p><p class="text-muted-foreground mt-1 text-[11px]">
-            {{ step.caption }}
-          </p>
-        </div>
-      </div>
+        <CardHeader>
+          <CardDescription>{{ card.label }}</CardDescription>
+          <CardTitle class="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+            {{ card.value }}
+          </CardTitle>
+          <CardAction>
+            <Badge variant="outline">
+              <component :is="card.icon" />
+              {{ card.badge }}
+            </Badge>
+          </CardAction>
+        </CardHeader>
+        <CardFooter class="flex-col items-start gap-1.5 text-sm">
+          <div class="line-clamp-1 font-medium">
+            {{ card.title }}
+          </div>
+          <div class="text-muted-foreground">
+            {{ card.hint }}
+          </div>
+        </CardFooter>
+      </Card>
     </div>
 
     <div
@@ -167,181 +206,239 @@ onBeforeUnmount(() => {
     >
       {{ error }}
     </div>
-    <div class="grid items-start gap-5 xl:grid-cols-[280px_1fr]">
-      <section class="bg-card overflow-hidden rounded-xl border">
-        <div class="border-b p-4">
-          <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-sm font-semibold">
-              Select a client
-            </h2><span class="text-muted-foreground text-xs tabular-nums">{{ number(total) }}</span>
-          </div><div class="relative">
-            <IconSearch class="text-muted-foreground absolute top-2.5 left-3 size-4" /><Input
+
+    <div class="grid items-start gap-4 @3xl/main:grid-cols-[300px_minmax(0,1fr)]">
+      <Card>
+        <CardHeader>
+          <CardTitle>Clients</CardTitle>
+          <CardDescription>Select a client to explore their history.</CardDescription>
+          <CardAction>
+            <Badge variant="outline">
+              {{ number(total) }}
+            </Badge>
+          </CardAction>
+        </CardHeader>
+        <CardContent class="grid gap-4">
+          <div class="relative">
+            <IconSearch class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+            <Input
               v-model="search"
-              placeholder="Search name, ID or city…"
+              placeholder="Name, ID or city…"
               aria-label="Search clients"
-              class="h-9 pl-9"
+              class="pl-8"
               :disabled="running"
             />
           </div>
-        </div>
-        <p
-          v-if="listError"
-          role="alert"
-          class="text-destructive p-4 text-xs"
-        >
-          {{ listError }}<Button
-            class="mt-3"
-            variant="outline"
-            size="sm"
-            @click="loadClients"
+          <div
+            v-if="listError"
+            role="alert"
+            class="text-destructive grid gap-3 py-4 text-sm"
           >
-            Retry
-          </Button>
-        </p>
-        <div
-          v-else-if="listLoading"
-          class="text-muted-foreground flex justify-center gap-2 p-8 text-xs"
-        >
-          <IconLoader2 class="size-4 animate-spin" /> Loading clients…
-        </div>
-        <div
-          v-else-if="!clients.length"
-          class="text-muted-foreground p-8 text-center text-sm"
-        >
-          No matching clients.
-        </div>
-        <div
-          v-else
-          class="max-h-100 overflow-y-auto p-2 xl:max-h-115"
-        >
-          <button
-            v-for="client in clients"
-            :key="client.id"
-            :disabled="running"
-            :aria-pressed="selectedId === client.id"
-            class="hover:bg-muted/50 flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-3 text-left transition disabled:opacity-60"
-            :class="selectedId === client.id ? 'bg-primary/10 border-primary/20!' : ''"
-            @click="selectClient(client.id)"
-          >
-            <span
-              class="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-medium"
-              :class="selectedId === client.id ? 'bg-primary/15! text-primary!' : ''"
-            >{{ client.name.split(' ').map(word => word[0]).slice(0, 2).join('') }}</span>
-            <span class="min-w-0 flex-1"><span class="block truncate text-xs font-medium">{{ client.name }}</span><span class="text-muted-foreground mt-1 block truncate text-[11px]">{{ client.city }} · {{ client.transaction_count }} transactions</span></span><IconCheck
-              v-if="selectedId === client.id"
-              class="text-primary size-3.5 shrink-0"
-            />
-          </button>
-        </div>
-        <div class="text-muted-foreground flex items-center justify-between border-t px-4 py-2 text-[10px]">
-          <span>{{ total ? offset + 1 : 0 }}–{{ Math.min(offset + 30, total) }} of {{ number(total) }}</span><div class="flex gap-1">
+            {{ listError }}
             <Button
-              variant="ghost"
+              variant="outline"
+              size="sm"
+              class="justify-self-start"
+              @click="loadClients"
+            >
+              Retry
+            </Button>
+          </div>
+          <div
+            v-else-if="listLoading"
+            class="text-muted-foreground flex justify-center gap-2 py-10 text-sm"
+          >
+            <IconLoader2 class="size-4 animate-spin" /> Loading clients…
+          </div>
+          <div
+            v-else-if="!clients.length"
+            class="text-muted-foreground py-10 text-center text-sm"
+          >
+            No matching clients.
+          </div>
+          <div
+            v-else
+            class="max-h-100 overflow-y-auto"
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Client</TableHead>
+                  <TableHead class="text-right">
+                    Transactions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow
+                  v-for="client in clients"
+                  :key="client.id"
+                  :data-state="selectedId === client.id ? 'selected' : undefined"
+                  class="cursor-pointer"
+                  @click="selectClient(client.id)"
+                >
+                  <TableCell>
+                    <button
+                      :disabled="running"
+                      :aria-pressed="selectedId === client.id"
+                      class="text-left font-medium disabled:opacity-60"
+                      @click.stop="selectClient(client.id)"
+                    >
+                      {{ client.name }}
+                    </button>
+                    <div class="text-muted-foreground text-xs">
+                      {{ ageLabel(client.age) }} · {{ client.city }}
+                    </div>
+                  </TableCell>
+                  <TableCell class="text-right tabular-nums">
+                    {{ number(client.transaction_count) }}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+        <CardFooter class="justify-between gap-2">
+          <span class="text-muted-foreground text-xs tabular-nums">{{ total ? offset + 1 : 0 }}–{{ Math.min(offset + 30, total) }} of {{ number(total) }}</span>
+          <div class="flex gap-1">
+            <Button
+              variant="outline"
               size="icon"
-              class="size-7"
+              class="size-8"
               :disabled="offset === 0 || running || listLoading"
               aria-label="Previous clients"
               @click="changePage(-1)"
             >
-              <IconChevronLeft class="size-3.5" />
-            </Button><Button
-              variant="ghost"
+              <IconChevronLeft class="size-4" />
+            </Button>
+            <Button
+              variant="outline"
               size="icon"
-              class="size-7"
+              class="size-8"
               :disabled="offset + 30 >= total || running || listLoading"
               aria-label="Next clients"
               @click="changePage(1)"
             >
-              <IconChevronRight class="size-3.5" />
+              <IconChevronRight class="size-4" />
             </Button>
           </div>
-        </div>
-      </section>
+        </CardFooter>
+      </Card>
 
-      <section class="bg-card flex min-h-115 flex-col rounded-xl border p-5 sm:p-6">
-        <div
+      <div class="grid min-w-0 gap-4">
+        <Card
           v-if="detailLoading"
-          class="text-muted-foreground flex flex-1 items-center justify-center gap-2 text-sm"
+          class="min-h-80 items-center justify-center"
         >
-          <IconLoader2 class="size-5 animate-spin" /> Reading client history…
-        </div>
+          <div class="text-muted-foreground flex items-center gap-2 text-sm">
+            <IconLoader2 class="size-5 animate-spin" /> Reading client history…
+          </div>
+        </Card>
         <template v-else-if="detail">
-          <div class="mb-6 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div class="mb-1 flex flex-wrap items-center gap-2">
-                <h2 class="text-xl font-semibold tracking-tight">
-                  {{ detail.client.name }}
-                </h2><Badge
-                  variant="outline"
-                  class="text-[9px]"
-                >
-                  Synthetic client
-                </Badge>
-              </div><p class="text-muted-foreground text-xs">
-                {{ detail.client.age }} years · {{ detail.client.city }}, {{ countryName(detail.client.country) }}
-              </p><p class="text-muted-foreground/60 mt-1 font-mono text-[10px]">
-                {{ detail.client.id }}
-              </p>
-            </div><Badge
-              :variant="detail.client.personalization_allowed ? 'secondary' : 'outline'"
-              class="gap-1 text-[10px]"
-            >
-              <IconShieldCheck class="size-3" />{{ detail.client.personalization_allowed ? 'Personalization allowed' : 'Personalization declined' }}
-            </Badge>
-          </div>
+          <Card>
+            <CardHeader class="flex flex-wrap items-center justify-between gap-4">
+              <div class="grid gap-1.5">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="text-lg font-semibold">
+                    {{ detail.client.name }}
+                  </h2>
+                  <Badge variant="outline">
+                    Synthetic client
+                  </Badge>
+                </div>
+                <CardDescription>{{ ageLabel(detail.client.age) }} · {{ detail.client.city }}, {{ countryName(detail.client.country) }}</CardDescription>
+                <p class="text-muted-foreground text-xs">
+                  {{ detail.client.id }}
+                </p>
+              </div>
+              <Button
+                :disabled="running || savedLoading || detailLoading || (health !== null && !health.jev_configured && detail.client.personalization_allowed)"
+                @click="run"
+              >
+                <IconLoader2
+                  v-if="running"
+                  class="animate-spin"
+                />
+                <IconPlayerPlay v-else />
+                {{ running ? 'Analyzing…' : analysis ? 'Run again' : 'Run analysis' }}
+              </Button>
+            </CardHeader>
+            <CardFooter class="flex-wrap justify-between gap-2">
+              <Badge variant="outline">
+                <IconShieldCheck />
+                {{ detail.client.personalization_allowed ? 'Personalization allowed' : 'Personalization declined' }}
+              </Badge>
+              <span class="text-muted-foreground flex items-center gap-2 text-xs">
+                <span
+                  class="size-1.5 rounded-full"
+                  :class="health?.jev_configured ? 'bg-primary' : 'bg-muted-foreground'"
+                />
+                {{ health ? (health.jev_configured ? 'Jev connected' : 'Jev not configured') : healthFailed ? 'API unavailable' : 'Connecting to API…' }}
+              </span>
+            </CardFooter>
+          </Card>
           <ClientFacts :detail="detail" />
-          <div class="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-5">
-            <p class="text-muted-foreground max-w-sm text-xs leading-relaxed">
-              {{ detail.client.personalization_allowed ? 'The workflow checks the available evidence and can choose to withhold a recommendation.' : 'The workflow will respect this preference and return no personalized advertising.' }}
-            </p><Button
-              :disabled="running || detailLoading || (health !== null && !health.jev_configured && detail.client.personalization_allowed)"
-              class="h-10 px-5"
-              @click="run"
-            >
-              <IconLoader2
-                v-if="running"
-                class="size-4 animate-spin"
-              /><IconPlayerPlay
-                v-else
-                class="size-4"
-              />{{ running ? 'Analyzing…' : analysis ? 'Run again' : 'Run analysis' }}<IconArrowRight
-                v-if="!running"
-                class="size-4"
-              />
-            </Button>
-          </div>
         </template>
-        <div
+        <Card
           v-else
-          class="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-3 text-sm"
+          class="text-muted-foreground min-h-80 items-center justify-center gap-3"
         >
-          <IconFingerprint class="size-8 opacity-40" /> Select a client to start the workflow.
-        </div>
-      </section>
+          <IconFingerprint class="size-8" />
+          Select a client to start the workflow.
+        </Card>
+      </div>
     </div>
 
-    <div
+    <Card
       v-if="running"
-      class="border-primary/30 bg-primary/5 flex items-center gap-4 rounded-xl border p-5"
       role="status"
     >
-      <IconLoader2 class="text-primary size-6 shrink-0 animate-spin" /><div class="flex-1">
-        <p class="text-sm font-medium">
-          Analyzing evidence and evaluating product relevance
-        </p><p class="text-muted-foreground mt-1 text-xs">
-          The full workflow is running. Results and measured stages will appear when it finishes.
-        </p>
-      </div><span class="text-primary font-mono text-sm tabular-nums">{{ duration(elapsed) }}</span>
-    </div>
+      <CardContent class="flex items-center gap-3">
+        <IconLoader2 class="text-primary size-5 shrink-0 animate-spin" />
+        <div class="flex-1">
+          <p class="font-medium">
+            Analyzing client evidence
+          </p>
+          <p class="text-muted-foreground mt-1 text-sm">
+            Building the profile and checking which products are relevant.
+          </p>
+        </div>
+        <Badge variant="outline">
+          {{ duration(elapsed) }}
+        </Badge>
+      </CardContent>
+    </Card>
     <AnalysisResult
       v-if="analysis"
       :analysis="analysis"
     />
-    <div
+    <p
       v-else-if="!running"
-      class="text-muted-foreground flex items-start gap-2 text-xs leading-relaxed"
+      class="text-muted-foreground flex items-start gap-2 text-sm"
     >
-      <IconShieldCheck class="mt-0.5 size-4 shrink-0" /><p>Every recommendation includes its supporting evidence. Limited data, unsuitable products and declined personalization are valid outcomes.</p>
-    </div>
+      <IconShieldCheck class="mt-0.5 size-4 shrink-0" />
+      Recommendations include supporting evidence. The workflow can return no offer when information is insufficient.
+    </p>
+    <p
+      v-if="savedLoading"
+      role="status"
+      class="text-muted-foreground flex items-center gap-2 text-sm"
+    >
+      <IconLoader2 class="size-4 animate-spin" /> Loading saved analysis…
+    </p>
+    <p
+      v-if="historyError"
+      role="alert"
+      class="text-destructive text-sm"
+    >
+      {{ historyError }}
+    </p>
+    <RunHistory
+      v-if="selectedId"
+      kind="analysis"
+      :client-id="selectedId"
+      :refresh-key="historyRefresh"
+      @select="loadSavedAnalysis"
+    />
   </div>
 </template>

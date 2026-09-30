@@ -3,10 +3,15 @@
 import asyncio
 from collections import OrderedDict
 import math
+import logging
 import time
 from uuid import uuid4
 
 from app.workflow import Workflow
+from app.run_store import RunStore
+
+
+logger = logging.getLogger(__name__)
 
 
 def aggregate_metrics(results: list[dict], elapsed_ms: float) -> dict:
@@ -49,11 +54,29 @@ class BenchmarkBusy(ValueError):
 
 
 class BenchmarkManager:
-    def __init__(self, workflow: Workflow, max_retained_jobs: int = 5):
+    def __init__(self, workflow: Workflow, max_retained_jobs: int = 5, store: RunStore | None = None):
         self.workflow = workflow
         self.jobs: OrderedDict[str, dict] = OrderedDict()
         self.tasks: dict[str, asyncio.Task] = {}
         self.max_retained_jobs = max_retained_jobs
+        self.store = store
+
+    def _checkpoint(self, identifier: str, results: list[dict] | None = None, results_offset: int = 0) -> None:
+        if self.store is not None:
+            pending = self.jobs[identifier]["_unsaved_results"]
+            if results:
+                pending.extend(enumerate(results, start=results_offset))
+            snapshot = self.snapshot(identifier, results_limit=0)
+            snapshot["results"] = [result for _, result in pending]
+            self.store.save_benchmark(snapshot, results_offset=pending[0][0] if pending else 0)
+            pending.clear()
+
+    def _persistence_failed(self, job: dict) -> None:
+        job["_persistence_failed"] = True
+        job["cancel_requested"] = True
+        job["status"] = "failed"
+        job["error"] = "The benchmark stopped because its results could not be saved. Recorded provider costs remain included where available."
+        logger.error("Could not persist benchmark %s", job["id"])
 
     def _registry_snapshot(self) -> dict:
         service = getattr(self.workflow, "category_service", None)
@@ -63,7 +86,7 @@ class BenchmarkManager:
         return {"count": len(items), "labels": [item["label"] for item in items]}
 
     def start(self, count: int, concurrency: int) -> dict:
-        if any(job["status"] == "running" for job in self.jobs.values()):
+        if self.tasks or any(job["status"] == "running" for job in self.jobs.values()):
             raise BenchmarkBusy("A benchmark is already running. Wait for it to finish or cancel it.")
         clients = self.workflow.data.benchmark_clients(count)
         while len(self.jobs) >= self.max_retained_jobs:
@@ -71,7 +94,13 @@ class BenchmarkManager:
         identifier = uuid4().hex
         self.jobs[identifier] = {"id": identifier, "status": "running", "requested_count": count, "concurrency": concurrency,
                                  "results": [], "error": None, "cancel_requested": False, "_started": time.perf_counter(), "_elapsed_ms": None,
+                                 "_persistence_failed": False, "_unsaved_results": [],
                                  "category_registry_before": self._registry_snapshot(), "category_registry_after": None}
+        try:
+            self._checkpoint(identifier)
+        except Exception:
+            self.jobs.pop(identifier)
+            raise
         self.tasks[identifier] = asyncio.create_task(self._run(identifier, clients, concurrency))
         return self.snapshot(identifier)
 
@@ -94,6 +123,12 @@ class BenchmarkManager:
                         "currency", "observation_start", "observation_end", "transaction_count", "balance_cents", "monthly_cashflow", "existing_insurance",
                     ) if key in result["facts"]}
                     job["results"].append(compact)
+                    try:
+                        # Keep full evidence in SQL, compact evidence in bounded RAM.
+                        self._checkpoint(identifier, [result], len(job["results"]) - 1)
+                    except Exception:
+                        self._persistence_failed(job)
+                        raise
                 finally:
                     queue.task_done()
 
@@ -101,11 +136,14 @@ class BenchmarkManager:
             outcomes = await asyncio.gather(*(worker() for _ in range(min(concurrency, len(clients)))), return_exceptions=True)
             if any(isinstance(outcome, BaseException) for outcome in outcomes):
                 job["status"] = "failed"
-                job["error"] = "A worker failed. All remaining active workers finished before final metrics were recorded."
+                if not job["_persistence_failed"]:
+                    job["error"] = "A worker failed. All remaining active workers finished before final metrics were recorded."
+            elif job["_persistence_failed"]:
+                job["status"] = "failed"
             else:
                 job["status"] = "cancelled" if job["cancel_requested"] else "completed"
         except asyncio.CancelledError:
-            job["status"] = "cancelled"
+            job["status"] = "failed"
             job["error"] = "Server shutdown interrupted this run; in-flight provider usage may be unavailable."
             raise
         except Exception:
@@ -114,9 +152,20 @@ class BenchmarkManager:
         finally:
             job["_elapsed_ms"] = (time.perf_counter() - job["_started"]) * 1000
             job["category_registry_after"] = self._registry_snapshot()
+            try:
+                self._checkpoint(identifier)
+            except Exception:
+                self._persistence_failed(job)
+                try:
+                    self._checkpoint(identifier)
+                except Exception:
+                    # The last durable running checkpoint is recovered on startup.
+                    pass
             self.tasks.pop(identifier, None)
 
     def snapshot(self, identifier: str, results_limit: int = 1000, results_offset: int = 0) -> dict:
+        if identifier not in self.jobs and self.store is not None:
+            return self.store.get_benchmark(identifier, results_limit=results_limit, results_offset=results_offset)
         job = self.jobs[identifier]
         elapsed = job["_elapsed_ms"] if job["_elapsed_ms"] is not None else (time.perf_counter() - job["_started"]) * 1000
         return {"id": identifier, "status": job["status"], "requested_count": job["requested_count"],
@@ -127,16 +176,22 @@ class BenchmarkManager:
                 "category_registry_after": job["category_registry_after"] or self._registry_snapshot()}
 
     def cancel(self, identifier: str) -> dict:
+        if identifier not in self.jobs:
+            return self.snapshot(identifier)
         job = self.jobs[identifier]
         if job["status"] == "running":
             # Finish current requests to retain their measured latency and cost.
             job["cancel_requested"] = True
+            try:
+                self._checkpoint(identifier)
+            except Exception:
+                self._persistence_failed(job)
         return self.snapshot(identifier)
 
     async def close(self) -> None:
         for job in self.jobs.values():
             if job["status"] == "running":
-                job["cancel_requested"] = True
+                self.cancel(job["id"])
         pending = list(self.tasks.values())
         if pending:
             try:

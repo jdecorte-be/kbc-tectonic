@@ -1,4 +1,17 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: kbc
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - bank_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kbc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
   backend:
     build:
       context: .
@@ -6,6 +19,8 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/kbc}
+      GENERATED_CLIENT_COUNT: ${GENERATED_CLIENT_COUNT:-1000}
       JEV_API: ${JEV_API:-}
       JEV_API_URL: ${JEV_API_URL:-https://api.typesafe.ai/v1/systemone}
       JEV_MODEL: ${JEV_MODEL:-jev-latest}
@@ -19,6 +34,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     volumes:
       - category_data:/workspace/data
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 10s
@@ -39,3 +57,4 @@ services:
 
 volumes:
   category_data:
+  bank_data:

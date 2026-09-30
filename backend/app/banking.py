@@ -1,12 +1,15 @@
 """Synthetic banking data and reproducible, integer-cent transaction facts."""
 
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 import importlib.util
 import json
 from pathlib import Path
 from typing import Any
+
+from app.data_validation import customer_payload, validate_products, validate_profiles
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,39 +36,70 @@ def sparse_client() -> dict:
     }
 
 
+class _RepositoryClients(Mapping):
+    """Read-only compatibility mapping; records are loaded only when requested."""
+    def __init__(self, repository):
+        self.repository = repository
+        self.identifiers = tuple(repository.client_ids())
+        self.identifier_set = frozenset(self.identifiers)
+
+    def __getitem__(self, key):
+        return self.repository.get_client(key)
+
+    def __iter__(self):
+        return iter(self.identifiers)
+
+    def __len__(self):
+        return len(self.identifiers)
+
+    def __contains__(self, key):
+        return key in self.identifier_set
+
+
 class BankData:
-    def __init__(self, data_path: str = "", products_path: str = "", generated_count: int = 1000):
+    def __init__(self, data_path: str = "", products_path: str = "", generated_count: int = 1000, repository=None):
+        self.repository = repository
+        self._facts: dict[str, dict] = {}
+        if repository is not None and repository.is_seeded() and not data_path:
+            # Reuse durable banking records without generating or loading the population again.
+            self.products = repository.get_products()
+            if products_path:
+                supplied = json.loads(Path(products_path).expanduser().read_text(encoding="utf-8"))
+                catalogue = [product.model_dump() for product in validate_products(supplied)]
+                if catalogue != self.products:
+                    raise ValueError("This database contains a different product catalogue. Use a separate DATABASE_URL to import it.")
+            self.clients = _RepositoryClients(repository)
+            return
         if data_path:
             profiles = json.loads(Path(data_path).expanduser().read_text(encoding="utf-8"))
             if not isinstance(profiles, list) or not profiles:
                 raise ValueError("BANK_DATA_PATH must contain a list of synthetic customers.")
         else:
-            # Load the supplied generator without running its CLI or writing generated files.
             spec = importlib.util.spec_from_file_location("bank_profile_generator", ROOT / "generate_bank_profiles.py")
             if spec is None or spec.loader is None:
                 raise ValueError("The synthetic profile generator could not be found.")
             generator = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(generator)
             profiles = [generator.profile(i) for i in range(1, generated_count + 1)]
-        self.clients: dict[str, dict] = {}
-        for profile in profiles:
-            if profile.get("synthetique") is not True:
-                raise ValueError("Only data explicitly marked as synthetic is accepted.")
-            identifier = profile["client_id"]
-            if identifier in self.clients:
-                raise ValueError("Duplicate synthetic customer identifier.")
-            # The simulator's hidden label must never enter inference, even accidentally.
-            clean = {key: value for key, value in profile.items() if key != "scenario_simulation"}
-            self.clients[identifier] = clean
-        if "SYN-SPARSE" not in self.clients:
-            self.clients["SYN-SPARSE"] = sparse_client()
-        catalogue = json.loads(Path(products_path or ROOT / "products.json").read_text(encoding="utf-8"))
-        self.products = [
-            {"id": product.get("id", f"product-{index:02d}"), "name": product["name"], "description": product["description"]}
-            for index, product in enumerate(catalogue, 1)
-        ]
-        self.summaries = [client_summary(client) for client in self.clients.values()]
-        self._facts: dict[str, dict] = {}
+        if not any(isinstance(profile, dict) and profile.get("client_id") == "SYN-SPARSE" for profile in profiles):
+            profiles.append(sparse_client())
+        catalogue = json.loads(Path(products_path or ROOT / "products.json").expanduser().read_text(encoding="utf-8"))
+        if repository is not None:
+            repository.seed(profiles, catalogue)
+            self.clients = _RepositoryClients(repository)
+            self.products = repository.get_products()
+        else:
+            # In-memory mode keeps the same validation and DTOs for isolated workflow tests.
+            validated = validate_profiles(profiles)
+            self.clients = {profile.client_id: customer_payload(profile) for profile in validated}
+            self.products = [product.model_dump() for product in validate_products(catalogue)]
+
+    @property
+    def summaries(self) -> list[dict]:
+        if self.repository is not None:
+            return [item for offset in range(0, len(self.clients), 1000)
+                    for item in self.repository.list_clients(limit=1000, offset=offset)["items"]]
+        return [client_summary(client) for client in self.clients.values()]
 
     def get(self, client_id: str) -> dict:
         return self.clients[client_id]
@@ -76,19 +110,33 @@ class BankData:
         return self._facts[client_id]
 
     def list_clients(self, query: str = "", limit: int = 50, offset: int = 0) -> dict:
+        if self.repository is not None:
+            return self.repository.list_clients(query, limit, offset)
+        self._pagination(limit, offset)
         query = query.casefold().strip()
         matching = [item for item in self.summaries if not query or query in " ".join(
             str(item[key]) for key in ("id", "name", "city", "country")
         ).casefold()]
         return {"items": matching[offset:offset + limit], "total": len(matching)}
 
+    def list_transactions(self, client_id: str, limit: int = 50, offset: int = 0) -> dict:
+        if self.repository is not None:
+            return self.repository.list_transactions(client_id, limit, offset)
+        self._pagination(limit, offset)
+        transactions = self.get(client_id)["compte"]["transactions"]
+        return {"items": transactions[offset:offset + limit], "total": len(transactions)}
+
+    @staticmethod
+    def _pagination(limit: int, offset: int) -> None:
+        if type(limit) is not int or not 1 <= limit <= 1000 or type(offset) is not int or offset < 0:
+            raise ValueError("Pagination requires a limit from 1 to 1000 and a nonnegative offset.")
+
     def benchmark_clients(self, count: int) -> list[str]:
         ids = list(self.clients)
-        if count > len(ids):
-            raise ValueError(f"The dataset contains only {len(ids)} customers.")
+        if type(count) is not int or count < 1 or count > len(ids):
+            raise ValueError(f"Select between 1 and {len(ids)} synthetic customers.")
         if count == 1:
             return ids[:1]
-        # Span the entire deterministic population, including the sparse example.
         return [ids[index * (len(ids) - 1) // (count - 1)] for index in range(count)]
 
 

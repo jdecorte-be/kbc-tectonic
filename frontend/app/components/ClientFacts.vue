@@ -1,118 +1,199 @@
 <script setup lang="ts">
-import { IconArrowDownLeft, IconArrowUpRight, IconCalendar, IconCreditCard, IconWallet } from '@tabler/icons-vue'
-import { counterpartyName, euros, number, transactionCategory, type ClientDetail } from '@/lib/api'
+import type { ChartConfig } from '@/components/ui/chart'
+import { VisArea, VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
+import { z } from 'zod'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { ChartContainer, ChartCrosshair, ChartLegendContent, ChartTooltip, ChartTooltipContent, componentToString } from '@/components/ui/chart'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { counterpartyName, euros, transactionCategory, type ClientDetail } from '@/lib/api'
 
-defineProps<{ detail: ClientDetail }>()
+const props = defineProps<{ detail: ClientDetail }>()
+const expanded = ref(false)
+const cashflowSchema = z.array(z.object({ month: z.string(), credit_cents: z.number(), debit_cents: z.number() }))
+const cashflow = computed(() => {
+  const result = cashflowSchema.safeParse(props.detail.facts.monthly_cashflow)
+  return result.success ? result.data.map((row, index) => ({ index, month: row.month, credit: row.credit_cents / 100, debit: row.debit_cents / 100 })) : []
+})
+type CashflowPoint = typeof cashflow.value[number]
+const chartConfig = {
+  debit: { label: 'Debits (€)', color: 'var(--chart-1)' },
+  credit: { label: 'Credits (€)', color: 'var(--chart-3)' }
+} satisfies ChartConfig
+const maxY = computed(() => Math.max(1, ...cashflow.value.flatMap(row => [row.credit, row.debit])) * 1.15)
+const fmtAmount = (value: number) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR', notation: 'compact', maximumFractionDigits: 1 }).format(value)
+const fmtMonth = (index: number | Date) => {
+  const month = cashflow.value[Math.round(+index)]?.month
+  return month ? new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' }) : ''
+}
+const transactions = computed(() => [...props.detail.transactions].sort((a, b) => String(b.date).localeCompare(String(a.date))))
+const visibleTransactions = computed(() => expanded.value ? transactions.value : transactions.value.slice(0, 5))
 const signedAmount = (transaction: Record<string, unknown>) => {
   const raw = Number(transaction.montant ?? 0)
   return `${String(transaction.sens).toLowerCase() === 'debit' ? '−' : '+'}${euros(raw)}`
 }
-const date = (raw: unknown) => typeof raw === 'string' ? new Date(raw).toLocaleDateString('en-BE', { day: '2-digit', month: 'short' }) : '—'
+const date = (raw: unknown) => typeof raw === 'string' ? new Date(raw).toLocaleDateString('en-BE', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—'
+watch(() => props.detail.client.id, () => {
+  expanded.value = false
+})
 </script>
 
 <template>
-  <div class="flex flex-col gap-5">
-    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <div
-        v-for="stat in [
-          { label: 'Account balance', value: euros(detail.client.balance), icon: IconWallet },
-          { label: 'Transactions', value: number(detail.client.transaction_count), icon: IconCreditCard },
-          { label: 'Observed history', value: `${detail.facts.observation_days ?? '—'} days`, icon: IconCalendar },
-          { label: 'Observed credits', value: euros(Number(detail.facts.total_credit_cents ?? 0) / 100), icon: IconArrowDownLeft }
-        ]"
-        :key="stat.label"
-        class="bg-background/40 rounded-lg border p-3.5"
-      >
-        <div class="text-muted-foreground mb-2 flex items-center justify-between gap-2 text-xs">
-          <span>{{ stat.label }}</span><component
-            :is="stat.icon"
-            class="size-3.5"
-          />
+  <div class="grid min-w-0 gap-4">
+    <Card class="pt-0">
+      <CardHeader class="flex flex-wrap items-center gap-2 space-y-0 border-b py-4">
+        <div class="grid flex-1 gap-1">
+          <CardTitle>Cash flow trend</CardTitle>
+          <CardDescription>Observed monthly credits and debits, including transfers</CardDescription>
         </div>
-        <p class="text-lg font-semibold tracking-tight tabular-nums">
-          {{ stat.value }}
-        </p>
-      </div>
-    </div>
-    <div>
-      <div class="mb-3 flex items-center justify-between">
-        <h3 class="text-xs font-medium tracking-wide uppercase">
-          Recent transactions
-        </h3><span class="text-muted-foreground text-xs">{{ Math.min(5, detail.transactions.length) }} transactions</span>
-      </div>
-      <div
-        v-if="!detail.transactions.length"
-        class="text-muted-foreground rounded-lg border border-dashed p-5 text-center text-sm"
-      >
-        No transactions available for this client.
-      </div>
-      <div
-        v-else
-        class="divide-y"
-      >
-        <div
-          v-for="transaction in [...detail.transactions].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 5)"
-          :key="String(transaction.transaction_id)"
-          class="flex items-center gap-3 py-2.5"
+        <Badge variant="outline">
+          {{ cashflow.length }} {{ cashflow.length === 1 ? 'month' : 'months' }}
+        </Badge>
+      </CardHeader>
+      <CardContent class="px-2 pt-2 sm:px-4">
+        <ChartContainer
+          v-if="cashflow.length > 1"
+          :config="chartConfig"
+          class="aspect-auto h-[220px] w-full"
+          :cursor="false"
         >
-          <div class="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
-            <IconArrowDownLeft
-              v-if="String(transaction.sens).toLowerCase() === 'credit'"
-              class="size-4"
-            /><IconArrowUpRight
-              v-else
-              class="size-4"
+          <VisXYContainer
+            :key="detail.client.id"
+            :data="cashflow"
+            :margin="{ left: 8, right: 8 }"
+            :y-domain="[0, maxY]"
+          >
+            <VisArea
+              :x="(row: CashflowPoint) => row.index"
+              :y="(row: CashflowPoint) => row.debit"
+              :color="chartConfig.debit.color"
+              :opacity="0.15"
             />
-          </div>
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-sm">
-              {{ counterpartyName(transaction.contrepartie) }}
-            </p><p class="text-muted-foreground truncate text-[11px]">
-              {{ transactionCategory(transaction.categorie) }} · {{ date(transaction.date) }}
-            </p>
-          </div>
-          <span
-            class="text-sm font-medium tabular-nums"
-            :class="String(transaction.sens).toLowerCase() === 'credit' ? 'text-primary' : ''"
-          >{{ signedAmount(transaction) }}</span>
-        </div>
-      </div>
-      <details
-        v-if="detail.transactions.length > 5"
-        class="mt-3"
-      >
-        <summary class="text-muted-foreground hover:text-foreground cursor-pointer text-xs">
-          Explore full history ({{ detail.transactions.length }})
-        </summary>
-        <div class="mt-3 max-h-80 overflow-auto rounded-lg border">
-          <table class="w-full text-left text-xs">
-            <thead class="bg-muted sticky top-0">
-              <tr>
-                <th class="p-3">
-                  Date
-                </th><th class="p-3">
-                  Description / reference
-                </th><th class="p-3 text-right">
+            <VisLine
+              :x="(row: CashflowPoint) => row.index"
+              :y="(row: CashflowPoint) => row.debit"
+              :color="chartConfig.debit.color"
+              :line-width="1.5"
+            />
+            <VisLine
+              :x="(row: CashflowPoint) => row.index"
+              :y="(row: CashflowPoint) => row.credit"
+              :color="chartConfig.credit.color"
+              :line-width="1.5"
+            />
+            <VisAxis
+              type="x"
+              :tick-line="false"
+              :domain-line="false"
+              :grid-line="false"
+              :tick-values="cashflow.map(row => row.index)"
+              :tick-format="fmtMonth"
+            />
+            <VisAxis
+              type="y"
+              :num-ticks="3"
+              :tick-line="false"
+              :domain-line="false"
+              :tick-format="fmtAmount"
+            />
+            <ChartTooltip />
+            <ChartCrosshair
+              :template="componentToString(chartConfig, ChartTooltipContent, { labelFormatter: fmtMonth })"
+              :color="(row: CashflowPoint, index: number) => [chartConfig.debit.color, chartConfig.credit.color][index % 2]"
+            />
+          </VisXYContainer>
+          <ChartLegendContent />
+        </ChartContainer>
+        <p
+          v-else
+          class="text-muted-foreground flex min-h-40 items-center justify-center px-4 text-center text-sm"
+        >
+          At least two observed months are needed to show a trend.
+        </p>
+      </CardContent>
+      <CardFooter class="flex-wrap justify-between gap-3 text-sm">
+        <span><span class="text-muted-foreground">Observed credits</span> <span class="ml-1 font-medium tabular-nums">{{ euros(Number(detail.facts.total_credit_cents ?? 0) / 100) }}</span></span>
+        <span><span class="text-muted-foreground">Observed debits</span> <span class="ml-1 font-medium tabular-nums">{{ euros(Number(detail.facts.total_debit_cents ?? 0) / 100) }}</span></span>
+      </CardFooter>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle>Transactions</CardTitle>
+        <CardDescription>{{ expanded ? 'Full observed history' : 'Most recent activity' }}</CardDescription>
+        <CardAction>
+          <Badge variant="outline">
+            {{ detail.transactions.length }} total
+          </Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent>
+        <p
+          v-if="!detail.transactions.length"
+          class="text-muted-foreground py-5 text-center text-sm"
+        >
+          No transactions available for this client.
+        </p>
+        <div
+          v-else
+          class="max-h-80 overflow-y-auto"
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Merchant</TableHead>
+                <TableHead class="hidden lg:table-cell">
+                  Category
+                </TableHead>
+                <TableHead class="text-right">
                   Amount
-                </th>
-              </tr>
-            </thead><tbody class="divide-y">
-              <tr
-                v-for="transaction in [...detail.transactions].sort((a, b) => String(b.date).localeCompare(String(a.date)))"
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="transaction in visibleTransactions"
                 :key="String(transaction.transaction_id)"
               >
-                <td class="p-3 whitespace-nowrap">
+                <TableCell class="text-muted-foreground tabular-nums">
                   {{ date(transaction.date) }}
-                </td><td class="p-3">
-                  {{ counterpartyName(transaction.contrepartie) }} · {{ transactionCategory(transaction.categorie) }}<span class="text-muted-foreground mt-1 block">{{ transaction.transaction_id }}</span>
-                </td><td class="p-3 text-right whitespace-nowrap tabular-nums">
+                </TableCell>
+                <TableCell class="max-w-56 truncate font-medium">
+                  {{ counterpartyName(transaction.contrepartie) }}
+                  <span
+                    v-if="expanded"
+                    class="text-muted-foreground block text-xs font-normal"
+                  >{{ transaction.transaction_id }}</span>
+                </TableCell>
+                <TableCell class="text-muted-foreground hidden lg:table-cell">
+                  {{ transactionCategory(transaction.categorie) }}
+                </TableCell>
+                <TableCell
+                  class="text-right tabular-nums"
+                  :class="String(transaction.sens).toLowerCase() === 'credit' ? 'text-primary' : ''"
+                >
                   {{ signedAmount(transaction) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
-      </details>
-    </div>
+      </CardContent>
+      <CardFooter
+        v-if="detail.transactions.length > 5"
+        class="justify-between gap-3"
+      >
+        <span class="text-muted-foreground text-xs">{{ visibleTransactions.length }} of {{ detail.transactions.length }} transactions</span>
+        <Button
+          variant="outline"
+          size="sm"
+          @click="expanded = !expanded"
+        >
+          {{ expanded ? 'Show recent' : 'View full history' }}
+        </Button>
+      </CardFooter>
+    </Card>
   </div>
 </template>
