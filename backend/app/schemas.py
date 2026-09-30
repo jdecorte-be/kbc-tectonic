@@ -50,6 +50,30 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     pass
 
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    phone_number: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    is_active: Optional[bool] = None
+
+    financial_situation: Optional[str] = None
+    is_student: Optional[bool] = None
+    is_unemployed: Optional[bool] = None
+    is_high_income: Optional[bool] = None
+    discretionary_spender: Optional[str] = None
+    main_transportation: Optional[str] = None
+    children_count: Optional[int] = None
+    in_couple: Optional[bool] = None
+    has_insurance: Optional[bool] = None
+
+    housing_status: Optional[str] = None
+    age_range: Optional[str] = None
+    savings_goal: Optional[str] = None
+    risk_tolerance: Optional[str] = None
+
 class UserResponse(UserBase):
     id: int
     created_at: datetime
