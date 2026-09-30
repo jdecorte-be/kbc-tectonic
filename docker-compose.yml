@@ -29,7 +29,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/tododb}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:3001}
     volumes:
       - ./backend:/app
     depends_on:
@@ -59,6 +59,25 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.nuxt
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  client_frontend:
+    build:
+      context: ./client-app
+      dockerfile: Dockerfile
+    container_name: banking_client_frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    volumes:
+      - ./client-app:/app
+      - /app/node_modules
     depends_on:
       backend:
         condition: service_healthy

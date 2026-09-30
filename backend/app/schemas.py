@@ -30,6 +30,23 @@ class UserBase(BaseModel):
     country: Optional[str] = None
     is_active: bool = True
 
+    # Profiling & Financial Demographics
+    financial_situation: Optional[str] = "balanced"
+    is_student: bool = False
+    is_unemployed: bool = False
+    is_high_income: bool = False
+    discretionary_spender: Optional[str] = "moderate"
+    main_transportation: Optional[str] = "car"
+    children_count: int = 0
+    in_couple: bool = False
+    has_insurance: bool = True
+
+    # Additional Profile Fields
+    housing_status: Optional[str] = "renter"
+    age_range: Optional[str] = "26-35"
+    savings_goal: Optional[str] = "emergency_fund"
+    risk_tolerance: Optional[str] = "medium"
+
 class UserCreate(UserBase):
     pass
 

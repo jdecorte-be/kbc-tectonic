@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs logs-backend logs-frontend logs-db logs-adminer status ps clean shell-backend shell-frontend shell-db seed setup
+.PHONY: help build up down restart logs logs-backend logs-frontend logs-client logs-db logs-adminer status ps clean shell-backend shell-frontend shell-client shell-db seed setup
 
 # Default target
 .DEFAULT_GOAL := help
@@ -39,8 +39,11 @@ logs: ## Tail logs for all services
 logs-backend: ## Tail logs for backend service
 	docker compose logs -f backend
 
-logs-frontend: ## Tail logs for frontend service
+logs-frontend: ## Tail logs for Nuxt 4 frontend service
 	docker compose logs -f frontend
+
+logs-client: ## Tail logs for Banking Client App service
+	docker compose logs -f client_frontend
 
 logs-db: ## Tail logs for database service
 	docker compose logs -f db
@@ -64,6 +67,9 @@ shell-backend: ## Open bash shell inside backend container
 
 shell-frontend: ## Open sh shell inside frontend container
 	docker compose exec frontend sh
+
+shell-client: ## Open sh shell inside Banking Client container
+	docker compose exec client_frontend sh
 
 shell-db: ## Open psql interactive shell inside PostgreSQL container
 	docker compose exec db psql -U postgres -d tododb
