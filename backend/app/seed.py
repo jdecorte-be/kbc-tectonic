@@ -2,8 +2,9 @@ import sys
 import logging
 from decimal import Decimal
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from app.database import SessionLocal, engine, Base
-from app.models import User, Transaction, Todo
+from app.models import User, Transaction
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -74,25 +75,24 @@ SAMPLE_TRANSACTIONS = [
     {"user_index": 4, "amount": Decimal("50.00"), "currency": "EUR", "transaction_type": "payment", "status": "failed", "description": "Insufficient funds test"}
 ]
 
-SAMPLE_TODOS = [
-    {"title": "Initialize PostgreSQL Schema", "description": "Set up User and Transaction tables", "completed": True},
-    {"title": "Test Database Seed Command", "description": "Verify python -m app.seed creates sample data", "completed": True},
-    {"title": "Check Adminer UI", "description": "Access http://localhost:8080 to inspect database tables", "completed": False}
-]
-
 def seed_database(db: Session, force: bool = False) -> dict:
     Base.metadata.create_all(bind=engine)
 
+    try:
+        db.execute(text("DROP TABLE IF EXISTS todos CASCADE;"))
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Note dropping todos table: {e}")
+
     existing_users_count = db.query(User).count()
     if existing_users_count > 0 and not force:
-        logger.info(f"Database already contains {existing_users_count} users. Skipping seed. Pass force=True to reseed.")
+        logger.info(f"Database contains {existing_users_count} users. Skipping seed. Pass force=True to reseed.")
         return {"status": "skipped", "message": f"Database already seeded ({existing_users_count} users present)"}
 
     if force:
         logger.info("Force flag set. Cleaning existing data...")
         db.query(Transaction).delete()
         db.query(User).delete()
-        db.query(Todo).delete()
         db.commit()
 
     logger.info("Seeding Users...")
@@ -123,19 +123,13 @@ def seed_database(db: Session, force: bool = False) -> dict:
             db.add(tx)
             created_transactions += 1
 
-    logger.info("Seeding Sample Todos...")
-    for todo_data in SAMPLE_TODOS:
-        todo = Todo(**todo_data)
-        db.add(todo)
-
     db.commit()
     logger.info(f"Successfully seeded {len(created_users)} users and {created_transactions} transactions!")
 
     return {
         "status": "success",
         "users_created": len(created_users),
-        "transactions_created": created_transactions,
-        "todos_created": len(SAMPLE_TODOS)
+        "transactions_created": created_transactions
     }
 
 if __name__ == "__main__":

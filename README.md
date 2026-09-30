@@ -1,4 +1,4 @@
-# Docker Full-Stack Architecture (PostgreSQL + FastAPI + React Vite)
+# Full-Stack Docker Architecture (PostgreSQL + FastAPI + React Vite)
 
 A complete, production-ready containerized architecture featuring **PostgreSQL 16**, **FastAPI (Python 3.11)**, **React 18 + Vite (TypeScript)**, an **Adminer Database Web Manager**, and a **Makefile** for seamless developer workflows.
 
@@ -38,7 +38,7 @@ A complete, production-ready containerized architecture featuring **PostgreSQL 1
 - **Database (`db`)**: PostgreSQL 16 Alpine with `pg_isready` health checks and persistent volume (`postgres_data`).
 - **Database Web Management (`adminer`)**: Adminer web GUI on [http://localhost:8080](http://localhost:8080) for inspecting and querying PostgreSQL by hand.
 - **Backend (`backend`)**: FastAPI application with SQLAlchemy ORM, Pydantic validation, health status check, interactive Swagger docs ([http://localhost:8000/api/docs](http://localhost:8000/api/docs)), live reloading, and database seed script (`app.seed`).
-- **Frontend (`frontend`)**: React 18 + Vite + TypeScript application with hot module replacement (HMR) and Todo list interface.
+- **Frontend (`frontend`)**: React 18 + Vite + TypeScript application framework.
 - **Makefile**: Unified command interface for setup, startup, database seeding, status inspection, logging, and shell access.
 
 ---
@@ -58,13 +58,13 @@ make up
 ```bash
 make seed
 ```
-*Seeds PostgreSQL with sample Users (names, phone numbers, addresses), Transactions (deposits, payments, withdrawals), and Todos.*
+*Seeds PostgreSQL with sample Users (names, phone numbers, emails, addresses) and Transactions (deposits, payments, withdrawals, transfers).*
 
 ### 3. Access Services
 - **Adminer DB Inspection UI**: [http://localhost:8080](http://localhost:8080)
   - *Login*: Server: `db`, Username: `postgres`, Password: `postgres`, Database: `tododb`
 - **FastAPI OpenAPI Docs**: [http://localhost:8000/api/docs](http://localhost:8000/api/docs)
-- **Frontend Application**: [http://localhost:5173](http://localhost:5173)
+- **Backend Health Check**: [http://localhost:8000/api/health](http://localhost:8000/api/health)
 
 ---
 
@@ -75,7 +75,7 @@ Run `make` or `make help` to view all available commands:
 | Command | Description |
 | :--- | :--- |
 | `make up` (or `make start`) | Start all services in background (with healthchecks) |
-| `make seed` | Populate database with sample Users, Transactions, and Todos |
+| `make seed` | Populate database with sample Users and Transactions |
 | `make build` | Rebuild Docker container images |
 | `make down` (or `make stop`) | Stop running services |
 | `make restart` | Restart all containers |
@@ -106,9 +106,3 @@ Run `make` or `make help` to view all available commands:
 ### Transactions (`/api/transactions`)
 - `GET /api/transactions` - List all transactions (optional `?user_id=1` filter)
 - `POST /api/transactions` - Create a transaction (`user_id`, `amount`, `currency`, `transaction_type`, `status`, `description`)
-
-### Todos (`/api/todos`)
-- `GET /api/todos` - List all todos (optional `?completed=true|false` filter)
-- `POST /api/todos` - Create a new todo
-- `PUT /api/todos/{id}` - Update todo
-- `DELETE /api/todos/{id}` - Delete todo
