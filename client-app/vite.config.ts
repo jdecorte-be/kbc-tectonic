@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  preview: {
+    allowedHosts: true, // behind a PaaS domain (nixpacks start)
+  },
   server: {
     host: '0.0.0.0',
     port: 3001,
