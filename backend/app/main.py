@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -97,6 +98,14 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="User with this email already exists")
     return crud.create_user(db, user)
 
+@app.put("/api/users/{user_id}", response_model=schemas.UserResponse, tags=["Users"])
+@app.patch("/api/users/{user_id}", response_model=schemas.UserResponse, tags=["Users"])
+def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
+    db_user = crud.update_user(db, user_id, user_update)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
 @app.get("/api/transactions", response_model=List[schemas.TransactionResponse], tags=["Transactions"])
 def list_transactions(user_id: Optional[int] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return crud.get_transactions(db, user_id=user_id, skip=skip, limit=limit)
@@ -136,3 +145,11 @@ def jev_score_clients(db: Session = Depends(get_db)):
     db.merge(models.DashboardMeta(key="jev", payload=payload))
     db.commit()
     return payload
+
+@app.get("/api/openapi.md", response_class=PlainTextResponse, tags=["Documentation"])
+def get_openapi_markdown():
+    try:
+        with open("OPENAPI.md", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "# REST API OpenAPI Specification\nDocumentation available at /OPENAPI.md"
