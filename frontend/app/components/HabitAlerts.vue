@@ -4,13 +4,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { PROFILES, clients, primaryProfile } from '@/data/mock'
 import type { Client } from '@/data/mock'
 
+const props = withDefaults(defineProps<{ limit?: number }>(), { limit: 6 })
 const emit = defineEmits<{ select: [client: Client] }>()
 
 const order = { alert: 0, watch: 1, info: 2 }
 const alerts = clients
   .filter(c => c.change)
   .sort((a, b) => order[a.change!.severity] - order[b.change!.severity])
-  .slice(0, 6)
+  .slice(0, props.limit)
 
 const variant = (s: string) => (s === 'alert' ? 'destructive' : s === 'watch' ? 'secondary' : 'outline')
 </script>

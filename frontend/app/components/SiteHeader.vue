@@ -19,7 +19,6 @@ const route = useRoute()
         {{ route.meta.title ?? 'Client profiles & habits' }}
       </h1>
       <div class="ml-auto flex items-center gap-2">
-        <span class="text-muted-foreground hidden text-xs sm:inline">Synthetic demo data</span>
         <Button variant="ghost" size="sm" as-child class="hidden sm:flex">
           <a
             href="https://github.com/jdecorte-be/kbc-tectonic"

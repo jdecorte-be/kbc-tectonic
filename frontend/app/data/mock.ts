@@ -71,6 +71,7 @@ export interface Client {
   signals: Signal[]
   change?: HabitChange
   transactions: Transaction[]
+  lastScanned: string // ISO timestamp of the last habit scan
 }
 
 // Deterministic PRNG so the demo looks identical on every reload (and SSR/client match).
@@ -205,6 +206,7 @@ function buildClient(seed: Seed, index: number): Client {
     topHabit: seed.topHabit,
     signals: seed.signals.map(([text, weight]) => ({ text, weight })),
     change: seed.change,
+    lastScanned: new Date(Date.UTC(2026, 8, 30, 6, Math.round(rand() * 59))).toISOString(),
     transactions: seed.tx.map(([merchant, category, amount], i) => ({
       date: new Date(Date.UTC(2026, 8, 29 - i * 3)).toISOString().slice(0, 10),
       merchant,
@@ -263,3 +265,46 @@ export const kpis = {
 }
 
 export const getClient = (id: string) => clients.find((c) => c.id === id)
+
+// Explicit links between clients (household, shared payments); everything else is derived from similarity.
+const LINKS: [string, string, string][] = [
+  ['c9', 'c10', 'Household · shared mortgage simulation'],
+  ['c1', 'c2', 'Same student housing · shared rent payments'],
+  ['c3', 'c4', 'Sends money to each other · joint ETF plan']
+]
+
+export interface Relation {
+  client: Client
+  kind: 'linked' | 'similar'
+  reason: string
+  score: number
+}
+
+export function relatedClients(c: Client, limit = 4): Relation[] {
+  const out: Relation[] = []
+  for (const o of clients) {
+    if (o.id === c.id) continue
+    const link = LINKS.find(([a, b]) => (a === c.id && b === o.id) || (a === o.id && b === c.id))
+    if (link) {
+      out.push({ client: o, kind: 'linked', reason: link[2], score: 100 })
+      continue
+    }
+    const shared = o.profiles.filter(p => c.profiles.some(q => q.id === p.id))
+    const reasons: string[] = []
+    let score = 0
+    if (shared.length) {
+      score += 50 * shared.length
+      reasons.push(`Shared profile: ${shared.map(p => PROFILES[p.id].label).join(', ')}`)
+    }
+    if (o.topHabit === c.topHabit) {
+      score += 15
+      reasons.push(`Same top habit (${o.topHabit})`)
+    }
+    if (Math.abs(o.age - c.age) <= 5) {
+      score += 10
+      reasons.push('Similar age')
+    }
+    if (score >= 25) out.push({ client: o, kind: 'similar', reason: reasons.join(' · '), score })
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, limit)
+}
